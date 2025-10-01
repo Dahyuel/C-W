@@ -816,7 +816,7 @@ const handleSubmit = async (e: React.FormEvent) => {
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0"
         style={{
-backgroundImage: 'url("../../src/Assets/careercenter.png")',
+          backgroundImage: 'url("/images/careercenter.png")',
         }}
       >
         {/* Overlay for better readability */}
