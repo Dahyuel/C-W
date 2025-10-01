@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { User, GraduationCap, Users, Lock, ChevronRight, CheckCircle, AlertCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { 
   RegistrationData, 
   ValidationError, 
@@ -20,9 +21,10 @@ import {
   validateConfirmPassword,
   validateVolunteerId
 } from '../utils/validation';
-import { signUpUser, uploadFile, updateUserFiles } from '../lib/supabase';
+import { uploadFile, updateUserFiles, signUpUser } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
-// FileUpload Component
+// FileUpload Component with animations
 const FileUpload: React.FC<{
   accept: string;
   maxSize: number;
@@ -30,7 +32,8 @@ const FileUpload: React.FC<{
   onFileRemove: () => void;
   label: string;
   currentFile?: File;
-}> = ({ accept, maxSize, onFileSelect, onFileRemove, label, currentFile }) => {
+  required?: boolean;
+}> = ({ accept, maxSize, onFileSelect, onFileRemove, label, currentFile, required = false }) => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -43,33 +46,39 @@ const FileUpload: React.FC<{
   };
 
   return (
-    <div className="space-y-2">
-      <div className="border-2 border-dashed border-orange-200 rounded-lg p-6 text-center">
+    <div className="space-y-2 fade-in-blur">
+      <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-all duration-300 ${
+        currentFile 
+          ? 'border-green-200 bg-green-50 transform hover:scale-[1.02]' 
+          : 'border-orange-200 hover:border-orange-300'
+      }`}>
         {currentFile ? (
-          <div className="flex items-center justify-center space-x-3">
+          <div className="flex items-center justify-center space-x-3 fade-in-scale">
+            <CheckCircle className="w-5 h-5 text-green-600" />
             <span className="text-sm font-medium text-gray-900">{currentFile.name}</span>
             <button
               type="button"
               onClick={onFileRemove}
-              className="text-red-600 hover:text-red-800"
+              className="text-red-600 hover:text-red-800 transition-colors duration-200"
             >
               Remove
             </button>
           </div>
         ) : (
-          <div>
+          <div className="fade-in-blur">
             <input
               type="file"
               accept={accept}
               onChange={handleFileChange}
               className="hidden"
-              id={`file-${label}`}
+              id={`file-${label.replace(/\s+/g, '-').toLowerCase()}`}
+              required={required}
             />
             <label
-              htmlFor={`file-${label}`}
-              className="cursor-pointer text-sm font-medium text-orange-600 hover:text-orange-700"
+              htmlFor={`file-${label.replace(/\s+/g, '-').toLowerCase()}`}
+              className="cursor-pointer text-sm font-medium text-orange-600 hover:text-orange-700 transition-colors duration-200 smooth-hover"
             >
-              {label}
+              {label} {required && '*'}
             </label>
           </div>
         )}
@@ -78,11 +87,10 @@ const FileUpload: React.FC<{
   );
 };
 
-interface RegistrationFormProps {
-  onSwitchToLogin: () => void;
-}
-
-export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLogin }) => {
+export const RegistrationForm: React.FC = () => {
+  const navigate = useNavigate();
+  const { signIn, isAuthenticated, profile, loading: authLoading, getRoleBasedRedirect } = useAuth();
+  
   const [currentSection, setCurrentSection] = useState(1);
   const [formData, setFormData] = useState<RegistrationData>({
     firstName: '',
@@ -116,67 +124,81 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
     { id: 4, title: 'Account Security', icon: Lock }
   ];
 
+  // Redirect when authentication is complete after auto-login
+  useEffect(() => {
+    if (isAuthenticated && profile && !authLoading) {
+      console.log('Auth context ready, redirecting to dashboard...');
+      navigate(getRoleBasedRedirect(), { replace: true });
+    }
+  }, [isAuthenticated, profile, authLoading, navigate, getRoleBasedRedirect]);
+
   const updateField = (field: keyof RegistrationData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     setErrors(prev => prev.filter(error => error.field !== field));
   };
 
-  const validateSection = (section: number): ValidationError[] => {
-    const validationErrors: ValidationError[] = [];
+// In your RegistrationForm component, update the validateSection function:
 
-    if (section === 1) {
-      const firstNameError = validateName(formData.firstName, 'First name');
-      if (firstNameError) validationErrors.push({ field: 'firstName', message: firstNameError });
+const validateSection = async (section: number): Promise<ValidationError[]> => {
+  const validationErrors: ValidationError[] = [];
 
-      const lastNameError = validateName(formData.lastName, 'Last name');
-      if (lastNameError) validationErrors.push({ field: 'lastName', message: lastNameError });
+  if (section === 1) {
+    const firstNameError = validateName(formData.firstName, 'First name');
+    if (firstNameError) validationErrors.push({ field: 'firstName', message: firstNameError });
 
-      if (!formData.gender) validationErrors.push({ field: 'gender', message: 'Gender is required' });
-      if (!formData.nationality) validationErrors.push({ field: 'nationality', message: 'Nationality is required' });
+    const lastNameError = validateName(formData.lastName, 'Last name');
+    if (lastNameError) validationErrors.push({ field: 'lastName', message: lastNameError });
 
-      const emailError = validateEmail(formData.email);
-      if (emailError) validationErrors.push({ field: 'email', message: emailError });
+    if (!formData.gender) validationErrors.push({ field: 'gender', message: 'Gender is required' });
+    if (!formData.nationality) validationErrors.push({ field: 'nationality', message: 'Nationality is required' });
 
-      const phoneError = validatePhone(formData.phone);
-      if (phoneError) validationErrors.push({ field: 'phone', message: phoneError });
+    const emailError = validateEmail(formData.email);
+    if (emailError) validationErrors.push({ field: 'email', message: emailError });
 
-      const personalIdError = validatePersonalId(formData.personalId);
-      if (personalIdError) validationErrors.push({ field: 'personalId', message: personalIdError });
+    const phoneError = validatePhone(formData.phone);
+    if (phoneError) validationErrors.push({ field: 'phone', message: phoneError });
+
+    const personalIdError = validatePersonalId(formData.personalId);
+    if (personalIdError) validationErrors.push({ field: 'personalId', message: personalIdError });
+  }
+
+  if (section === 2) {
+    if (!formData.university) validationErrors.push({ field: 'university', message: 'University is required' });
+    if (!formData.faculty) validationErrors.push({ field: 'faculty', message: 'Faculty is required' });
+    if (!formData.degreeLevel) validationErrors.push({ field: 'degreeLevel', message: 'Degree level is required' });
+    if (!formData.program) validationErrors.push({ field: 'program', message: 'Program/Major is required' });
+    if (formData.degreeLevel === 'student' && !formData.classYear) {
+      validationErrors.push({ field: 'classYear', message: 'Class year is required for students' });
     }
+  }
 
-    if (section === 2) {
-      if (!formData.university) validationErrors.push({ field: 'university', message: 'University is required' });
-      if (formData.university === 'Other' && !formData.customUniversity?.trim()) {
-        validationErrors.push({ field: 'customUniversity', message: 'Custom university name is required' });
+  if (section === 3) {
+    if (!formData.howDidYouHear) validationErrors.push({ field: 'howDidYouHear', message: 'This field is required' });
+    
+    // ✅ ADD VOLUNTEER ID VALIDATION HERE
+    if (formData.volunteerId && formData.volunteerId.trim()) {
+      const volunteerIdError = validateVolunteerId(formData.volunteerId);
+      if (volunteerIdError) {
+        validationErrors.push({ field: 'volunteerId', message: volunteerIdError });
       }
-      if (!formData.faculty) validationErrors.push({ field: 'faculty', message: 'Faculty is required' });
-      if (!formData.degreeLevel) validationErrors.push({ field: 'degreeLevel', message: 'Degree level is required' });
-      if (!formData.program?.trim()) validationErrors.push({ field: 'program', message: 'Program is required' });
-      if (formData.degreeLevel === 'Student' && !formData.classYear) {
-        validationErrors.push({ field: 'classYear', message: 'Class year is required for students' });
-      }
     }
+    
+    if (!fileUploads.universityId) validationErrors.push({ field: 'universityId', message: 'University ID is required' });
+    if (!fileUploads.resume) validationErrors.push({ field: 'resume', message: 'CV/Resume is required' });
+  }
 
-    if (section === 3) {
-      if (!formData.howDidYouHear) validationErrors.push({ field: 'howDidYouHear', message: 'This field is required' });
-      
-      const volunteerIdError = validateVolunteerId(formData.volunteerId || '');
-      if (volunteerIdError) validationErrors.push({ field: 'volunteerId', message: volunteerIdError });
-    }
+  if (section === 4) {
+    const passwordError = validatePassword(formData.password);
+    if (passwordError) validationErrors.push({ field: 'password', message: passwordError });
 
-    if (section === 4) {
-      const passwordError = validatePassword(formData.password);
-      if (passwordError) validationErrors.push({ field: 'password', message: passwordError });
+    const confirmPasswordError = validateConfirmPassword(formData.password, formData.confirmPassword);
+    if (confirmPasswordError) validationErrors.push({ field: 'confirmPassword', message: confirmPasswordError });
+  }
 
-      const confirmPasswordError = validateConfirmPassword(formData.password, formData.confirmPassword);
-      if (confirmPasswordError) validationErrors.push({ field: 'confirmPassword', message: confirmPasswordError });
-    }
-
-    return validationErrors;
-  };
-
-  const nextSection = () => {
-    const sectionErrors = validateSection(currentSection);
+  return validationErrors;
+};
+  const nextSection = async () => {
+    const sectionErrors = await validateSection(currentSection);
     if (sectionErrors.length > 0) {
       setErrors(sectionErrors);
       return;
@@ -194,108 +216,149 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  const allErrors = await Promise.all([1, 2, 3, 4].map(section => validateSection(section)))
+    .then(errorArrays => errorArrays.flat());
     
-    console.log('Form submission started...');
-    
-    // Validate all sections
-    const allErrors = [1, 2, 3, 4].flatMap(section => validateSection(section));
-    if (allErrors.length > 0) {
-      console.log('Validation errors found:', allErrors);
-      setErrors(allErrors);
-      // Go to first section with errors
-      const firstErrorSection = Math.min(...allErrors.map(error => {
-        if (['firstName', 'lastName', 'gender', 'nationality', 'email', 'phone', 'personalId'].includes(error.field)) return 1;
-        if (['university', 'customUniversity', 'faculty', 'degreeLevel', 'program', 'classYear'].includes(error.field)) return 2;
-        if (['howDidYouHear', 'volunteerId'].includes(error.field)) return 3;
-        if (['password', 'confirmPassword'].includes(error.field)) return 4;
-        return 1;
-      }));
-      setCurrentSection(firstErrorSection);
+  if (allErrors.length > 0) {
+    setErrors(allErrors);
+    const sectionMap: Record<string, number> = {
+      firstName: 1, lastName: 1, gender: 1, nationality: 1,
+      email: 1, phone: 1, personalId: 1,
+      university: 2, faculty: 2, degreeLevel: 2,
+      program: 2, classYear: 2,
+      howDidYouHear: 3, universityId: 3, resume: 3, volunteerId: 3,
+      password: 4, confirmPassword: 4,
+    };
+
+    const firstErrorSection = Math.min(
+      ...allErrors.map(error => sectionMap[error.field] ?? 1)
+    );
+    setCurrentSection(firstErrorSection);
+    return;
+  }
+
+  setLoading(true);
+  setErrors([]);
+
+  try {
+    const profileData = {
+      first_name: formData.firstName.trim(),
+      last_name: formData.lastName.trim(),
+      gender: formData.gender,
+      nationality: formData.nationality,
+      phone: formData.phone.trim(),
+      personal_id: formData.personalId.trim(),
+      university: formData.university === 'Other' ? formData.customUniversity : formData.university,
+      faculty: formData.faculty,
+      degree_level: formData.degreeLevel,
+      program: formData.program,
+      class: formData.degreeLevel === 'student' ? formData.classYear : null,
+      how_did_hear_about_event: formData.howDidYouHear,
+      volunteer_id: formData.volunteerId?.trim() || null,
+    };
+
+    console.log("🚀 Starting attendee registration with pre-validation...");
+
+    const { data, error } = await signUpUser(formData.email, formData.password, profileData);
+
+    if (error) {
+      console.error("❌ Registration failed:", error);
+      
+      // Handle edge function validation errors
+      if (error.validationErrors && Array.isArray(error.validationErrors)) {
+        const edgeFunctionErrors: ValidationError[] = error.validationErrors.map((msg: string) => ({
+          field: "general",
+          message: msg
+        }));
+        setErrors(edgeFunctionErrors);
+      } else {
+        setErrors([{ field: "general", message: error.message || "Failed to create account." }]);
+      }
       return;
     }
 
-    setLoading(true);
-    setErrors([]);
+    console.log("✅ Attendee registration successful, uploading files...");
+
+    // ... rest of your file upload logic remains the same
+    if (data?.user?.id) {
+      const userId = data.user.id;
+      const fileUpdates: Partial<{
+        university_id_path: string;
+        cv_path: string;
+      }> = {};
+
+      if (fileUploads.universityId) {
+        const { data: uniData, error: uniError } = await uploadFile(
+          'university-ids',
+          userId,
+          fileUploads.universityId
+        );
+
+        if (uniError) {
+          console.error('University ID upload failed:', uniError);
+          setErrors([{ field: "general", message: 'Failed to upload University ID. Please try again.' }]);
+          return;
+        }
+        fileUpdates.university_id_path = uniData?.path;
+      }
+
+      if (fileUploads.resume) {
+        const { data: resumeData, error: resumeError } = await uploadFile(
+          'cvs',
+          userId,
+          fileUploads.resume
+        );
+
+        if (resumeError) {
+          console.error('Resume upload failed:', resumeError);
+          setErrors([{ field: "general", message: 'Failed to upload Resume. Please try again.' }]);
+          return;
+        }
+        fileUpdates.cv_path = resumeData?.path;
+      }
+
+      if (Object.keys(fileUpdates).length > 0) {
+        const { error: updateError } = await updateUserFiles(userId, fileUpdates);
+        if (updateError) {
+          console.warn('Profile file paths update failed (user still created):', updateError);
+        }
+      }
+    }
+
+    console.log("✅ Registration completed successfully, attempting auto-login...");
 
     try {
-      const userData = {
-        first_name: formData.firstName.trim(),
-        last_name: formData.lastName.trim(),
-        gender: formData.gender, // enum: male, female, other, prefer_not_to_say
-        nationality: formData.nationality,
-        phone: formData.phone.trim(),
-        personal_id: formData.personalId.trim(),
-        university: formData.university === 'Other' ? formData.customUniversity?.trim() : formData.university,
-        faculty: formData.faculty,
-        degree_level: formData.degreeLevel.toLowerCase(), // enum: student/graduate
-        program: formData.program.trim(),
-        // Fix: Set class based on degree level per constraint requirements
-        class: formData.degreeLevel.toLowerCase() === 'student' ? formData.classYear || '1' : null,
-        how_did_hear_about_event: formData.howDidYouHear, // enum: linkedin, facebook, instagram, etc.
-        volunteer_id: formData.volunteerId?.trim() || null
-      };
-
-      console.log('Form data debug:', {
-        degreeLevel: formData.degreeLevel,
-        degreeLevelLower: formData.degreeLevel.toLowerCase(),
-        classYear: formData.classYear,
-        willIncludeClass: formData.degreeLevel.toLowerCase() === 'student' && formData.classYear
-      });
-      console.log('Final userData:', userData);
-
-      console.log('Submitting registration with data:', userData);
-
-      const { data, error } = await signUpUser(formData.email, formData.password, userData);
-
-      if (error) {
-        console.error('Sign up error:', error);
-        setErrors([{ field: 'general', message: error.message }]);
-        return;
+      const { error: signInError } = await signIn(formData.email, formData.password);
+      if (signInError) {
+        console.warn("⚠️ Auto-login failed:", signInError.message);
+        setShowSuccess(true);
       }
-
-      // Handle file uploads if any
-      if (data?.user && (fileUploads.universityId || fileUploads.resume)) {
-        const filePaths: { university_id_path?: string, cv_path?: string } = {};
-
-        if (fileUploads.universityId) {
-          const { data: uploadData } = await uploadFile('university-ids', data.user.id, fileUploads.universityId);
-          if (uploadData) filePaths.university_id_path = uploadData.path;
-        }
-
-        if (fileUploads.resume) {
-          const { data: uploadData } = await uploadFile('cvs', data.user.id, fileUploads.resume);
-          if (uploadData) filePaths.cv_path = uploadData.path;
-        }
-
-        if (Object.keys(filePaths).length > 0) {
-          await updateUserFiles(data.user.id, filePaths);
-        }
-      }
-
-      console.log('Registration successful!');
+    } catch (loginError) {
+      console.warn("⚠️ Auto-login exception:", loginError);
       setShowSuccess(true);
-      
-    } catch (error: any) {
-      console.error('Registration error:', error);
-      setErrors([{ 
-        field: 'general', 
-        message: error.message || 'An unexpected error occurred. Please try again.' 
-      }]);
-    } finally {
-      setLoading(false);
     }
-  };
 
+  } catch (error: any) {
+    console.error("Unexpected error during registration:", error);
+    setErrors([{
+      field: "general",
+      message: error.message || "An unexpected error occurred. Please try again.",
+    }]);
+  } finally {
+    setLoading(false);
+  }
+};
   const getFieldError = (field: string) => {
     return errors.find(error => error.field === field)?.message;
   };
 
   const renderPersonalInfo = () => (
-    <div className="space-y-6">
+    <div className="space-y-6 stagger-children">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
+        <div className="fade-in-blur">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             First Name *
           </label>
@@ -303,17 +366,17 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
             type="text"
             value={formData.firstName}
             onChange={(e) => updateField('firstName', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
-              getFieldError('firstName') ? 'border-red-500' : 'border-gray-300'
+            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+              getFieldError('firstName') ? 'border-red-300' : 'border-gray-300'
             }`}
             placeholder="Enter your first name"
           />
           {getFieldError('firstName') && (
-            <p className="mt-1 text-sm text-red-600">{getFieldError('firstName')}</p>
+            <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('firstName')}</p>
           )}
         </div>
 
-        <div>
+        <div className="fade-in-blur">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Last Name *
           </label>
@@ -321,49 +384,47 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
             type="text"
             value={formData.lastName}
             onChange={(e) => updateField('lastName', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
-              getFieldError('lastName') ? 'border-red-500' : 'border-gray-300'
+            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+              getFieldError('lastName') ? 'border-red-300' : 'border-gray-300'
             }`}
             placeholder="Enter your last name"
           />
           {getFieldError('lastName') && (
-            <p className="mt-1 text-sm text-red-600">{getFieldError('lastName')}</p>
+            <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('lastName')}</p>
           )}
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
+        <div className="fade-in-blur">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Gender *
           </label>
           <select
             value={formData.gender}
             onChange={(e) => updateField('gender', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
-              getFieldError('gender') ? 'border-red-500' : 'border-gray-300'
+            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+              getFieldError('gender') ? 'border-red-300' : 'border-gray-300'
             }`}
           >
             <option value="">Select gender</option>
             <option value="male">Male</option>
             <option value="female">Female</option>
-            <option value="other">Other</option>
-            <option value="prefer_not_to_say">Prefer not to say</option>
           </select>
           {getFieldError('gender') && (
-            <p className="mt-1 text-sm text-red-600">{getFieldError('gender')}</p>
+            <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('gender')}</p>
           )}
         </div>
 
-        <div>
+        <div className="fade-in-blur">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Nationality *
           </label>
           <select
             value={formData.nationality}
             onChange={(e) => updateField('nationality', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
-              getFieldError('nationality') ? 'border-red-500' : 'border-gray-300'
+            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+              getFieldError('nationality') ? 'border-red-300' : 'border-gray-300'
             }`}
           >
             <option value="">Select nationality</option>
@@ -371,31 +432,33 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
             <option value="Other">Other</option>
           </select>
           {getFieldError('nationality') && (
-            <p className="mt-1 text-sm text-red-600">{getFieldError('nationality')}</p>
+            <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('nationality')}</p>
           )}
         </div>
       </div>
 
-      <div>
+      <div className="fade-in-blur">
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Email Address *
         </label>
-        <input
-          type="email"
-          value={formData.email}
-          onChange={(e) => updateField('email', e.target.value)}
-          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
-            getFieldError('email') ? 'border-red-500' : 'border-gray-300'
-          }`}
-          placeholder="Enter your email address"
-        />
+        <div className="relative">
+          <input
+            type="email"
+            value={formData.email}
+            onChange={(e) => updateField('email', e.target.value)}
+            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+              getFieldError('email') ? 'border-red-300' : 'border-gray-300'
+            }`}
+            placeholder="Enter your email address"
+          />
+        </div>
         {getFieldError('email') && (
-          <p className="mt-1 text-sm text-red-600">{getFieldError('email')}</p>
+          <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('email')}</p>
         )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
+        <div className="fade-in-blur">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Phone Number *
           </label>
@@ -403,32 +466,34 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
             type="tel"
             value={formData.phone}
             onChange={(e) => updateField('phone', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
-              getFieldError('phone') ? 'border-red-500' : 'border-gray-300'
+            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+              getFieldError('phone') ? 'border-red-300' : 'border-gray-300'
             }`}
             placeholder="01X-XXXXXXXX"
           />
           {getFieldError('phone') && (
-            <p className="mt-1 text-sm text-red-600">{getFieldError('phone')}</p>
+            <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('phone')}</p>
           )}
         </div>
 
-        <div>
+        <div className="fade-in-blur">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Personal ID *
           </label>
-          <input
-            type="text"
-            value={formData.personalId}
-            onChange={(e) => updateField('personalId', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
-              getFieldError('personalId') ? 'border-red-500' : 'border-gray-300'
-            }`}
-            placeholder="14-digit Egyptian ID"
-            maxLength={14}
-          />
+          <div className="relative">
+            <input
+              type="text"
+              value={formData.personalId}
+              onChange={(e) => updateField('personalId', e.target.value)}
+              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+                getFieldError('personalId') ? 'border-red-300' : 'border-gray-300'
+              }`}
+              placeholder="14-digit Egyptian ID"
+              maxLength={14}
+            />
+          </div>
           {getFieldError('personalId') && (
-            <p className="mt-1 text-sm text-red-600">{getFieldError('personalId')}</p>
+            <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('personalId')}</p>
           )}
         </div>
       </div>
@@ -436,16 +501,16 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
   );
 
   const renderAcademicInfo = () => (
-    <div className="space-y-6">
-      <div>
+    <div className="space-y-6 stagger-children">
+      <div className="fade-in-blur">
         <label className="block text-sm font-medium text-gray-700 mb-2">
           University *
         </label>
         <select
           value={formData.university}
           onChange={(e) => updateField('university', e.target.value)}
-          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
-            getFieldError('university') ? 'border-red-500' : 'border-gray-300'
+          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+            getFieldError('university') ? 'border-red-300' : 'border-gray-300'
           }`}
         >
           <option value="">Select university</option>
@@ -454,12 +519,12 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
           ))}
         </select>
         {getFieldError('university') && (
-          <p className="mt-1 text-sm text-red-600">{getFieldError('university')}</p>
+          <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('university')}</p>
         )}
       </div>
 
       {formData.university === 'Other' && (
-        <div>
+        <div className="fade-in-blur">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Custom University Name *
           </label>
@@ -467,26 +532,26 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
             type="text"
             value={formData.customUniversity}
             onChange={(e) => updateField('customUniversity', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
-              getFieldError('customUniversity') ? 'border-red-500' : 'border-gray-300'
+            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+              getFieldError('customUniversity') ? 'border-red-300' : 'border-gray-300'
             }`}
             placeholder="Enter your university name"
           />
           {getFieldError('customUniversity') && (
-            <p className="mt-1 text-sm text-red-600">{getFieldError('customUniversity')}</p>
+            <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('customUniversity')}</p>
           )}
         </div>
       )}
 
-      <div>
+      <div className="fade-in-blur">
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Faculty *
         </label>
         <select
           value={formData.faculty}
           onChange={(e) => updateField('faculty', e.target.value)}
-          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
-            getFieldError('faculty') ? 'border-red-500' : 'border-gray-300'
+          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+            getFieldError('faculty') ? 'border-red-300' : 'border-gray-300'
           }`}
         >
           <option value="">Select faculty</option>
@@ -495,41 +560,41 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
           ))}
         </select>
         {getFieldError('faculty') && (
-          <p className="mt-1 text-sm text-red-600">{getFieldError('faculty')}</p>
+          <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('faculty')}</p>
         )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
+        <div className="fade-in-blur">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Degree Level *
           </label>
           <select
             value={formData.degreeLevel}
             onChange={(e) => updateField('degreeLevel', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
-              getFieldError('degreeLevel') ? 'border-red-500' : 'border-gray-300'
+            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+              getFieldError('degreeLevel') ? 'border-red-300' : 'border-gray-300'
             }`}
           >
             <option value="">Select degree level</option>
-            <option value="Student">Student</option>
-            <option value="Graduate">Graduate</option>
+            <option value="student">Student</option>
+            <option value="graduate">Graduate</option>
           </select>
           {getFieldError('degreeLevel') && (
-            <p className="mt-1 text-sm text-red-600">{getFieldError('degreeLevel')}</p>
+            <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('degreeLevel')}</p>
           )}
         </div>
 
-        {formData.degreeLevel === 'Student' && (
-          <div>
+        {formData.degreeLevel === 'student' && (
+          <div className="fade-in-blur">
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Class Year *
             </label>
             <select
               value={formData.classYear}
               onChange={(e) => updateField('classYear', e.target.value)}
-              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
-                getFieldError('classYear') ? 'border-red-500' : 'border-gray-300'
+              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+                getFieldError('classYear') ? 'border-red-300' : 'border-gray-300'
               }`}
             >
               <option value="">Select class year</option>
@@ -538,13 +603,13 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
               ))}
             </select>
             {getFieldError('classYear') && (
-              <p className="mt-1 text-sm text-red-600">{getFieldError('classYear')}</p>
+              <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('classYear')}</p>
             )}
           </div>
         )}
       </div>
 
-      <div>
+      <div className="fade-in-blur">
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Program/Major *
         </label>
@@ -552,29 +617,29 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
           type="text"
           value={formData.program}
           onChange={(e) => updateField('program', e.target.value)}
-          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
-            getFieldError('program') ? 'border-red-500' : 'border-gray-300'
+          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+            getFieldError('program') ? 'border-red-300' : 'border-gray-300'
           }`}
           placeholder="Enter your program or major"
         />
         {getFieldError('program') && (
-          <p className="mt-1 text-sm text-red-600">{getFieldError('program')}</p>
+          <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('program')}</p>
         )}
       </div>
     </div>
   );
 
   const renderEventInfo = () => (
-    <div className="space-y-6">
-      <div>
+    <div className="space-y-6 stagger-children">
+      <div className="fade-in-blur">
         <label className="block text-sm font-medium text-gray-700 mb-2">
           How did you hear about this event? *
         </label>
         <select
           value={formData.howDidYouHear}
           onChange={(e) => updateField('howDidYouHear', e.target.value)}
-          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
-            getFieldError('howDidYouHear') ? 'border-red-500' : 'border-gray-300'
+          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+            getFieldError('howDidYouHear') ? 'border-red-300' : 'border-gray-300'
           }`}
         >
           <option value="">Select an option</option>
@@ -583,65 +648,81 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
           ))}
         </select>
         {getFieldError('howDidYouHear') && (
-          <p className="mt-1 text-sm text-red-600">{getFieldError('howDidYouHear')}</p>
+          <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('howDidYouHear')}</p>
         )}
       </div>
 
-      <div>
+      <div className="fade-in-blur">
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Volunteer ID (Optional)
         </label>
-        <input
-          type="text"
-          value={formData.volunteerId}
-          onChange={(e) => updateField('volunteerId', e.target.value)}
-          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
-            getFieldError('volunteerId') ? 'border-red-500' : 'border-gray-300'
-          }`}
-          placeholder="Enter volunteer ID (if applicable)"
-        />
+        <div className="relative">
+          <input
+            type="text"
+            value={formData.volunteerId}
+            onChange={(e) => updateField('volunteerId', e.target.value)}
+            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+              getFieldError('volunteerId') ? 'border-red-300' : 'border-gray-300'
+            }`}
+            placeholder="Enter volunteer ID (if applicable)"
+          />
+        </div>
         {getFieldError('volunteerId') && (
-          <p className="mt-1 text-sm text-red-600">{getFieldError('volunteerId')}</p>
+          <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('volunteerId')}</p>
         )}
       </div>
 
-      <div className="space-y-4">
-        <h3 className="text-lg font-medium text-gray-900">Document Uploads (Optional)</h3>
+      <div className="space-y-4 fade-in-blur">
+        <h3 className="text-lg font-medium text-gray-900">Required Documents</h3>
         
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            University ID
+            University ID *
           </label>
           <FileUpload
             accept=".jpg,.jpeg,.png,.pdf"
             maxSize={10 * 1024 * 1024}
-            onFileSelect={(file) => setFileUploads(prev => ({ ...prev, universityId: file }))}
+            onFileSelect={(file) => {
+              setFileUploads(prev => ({ ...prev, universityId: file }));
+              setErrors(prev => prev.filter(error => error.field !== 'universityId'));
+            }}
             onFileRemove={() => setFileUploads(prev => ({ ...prev, universityId: undefined }))}
             label="Upload University ID (JPG, PNG, PDF - Max 10MB)"
             currentFile={fileUploads.universityId}
+            required={true}
           />
+          {getFieldError('universityId') && (
+            <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('universityId')}</p>
+          )}
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            CV/Resume
+            CV/Resume *
           </label>
           <FileUpload
             accept=".pdf,.doc,.docx"
             maxSize={10 * 1024 * 1024}
-            onFileSelect={(file) => setFileUploads(prev => ({ ...prev, resume: file }))}
+            onFileSelect={(file) => {
+              setFileUploads(prev => ({ ...prev, resume: file }));
+              setErrors(prev => prev.filter(error => error.field !== 'resume'));
+            }}
             onFileRemove={() => setFileUploads(prev => ({ ...prev, resume: undefined }))}
             label="Upload CV/Resume (PDF, DOC, DOCX - Max 10MB)"
             currentFile={fileUploads.resume}
+            required={true}
           />
+          {getFieldError('resume') && (
+            <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('resume')}</p>
+          )}
         </div>
       </div>
     </div>
   );
 
   const renderAccountSecurity = () => (
-    <div className="space-y-6">
-      <div>
+    <div className="space-y-6 stagger-children">
+      <div className="fade-in-blur">
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Password *
         </label>
@@ -649,17 +730,17 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
           type="password"
           value={formData.password}
           onChange={(e) => updateField('password', e.target.value)}
-          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
-            getFieldError('password') ? 'border-red-500' : 'border-gray-300'
+          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+            getFieldError('password') ? 'border-red-300' : 'border-gray-300'
           }`}
           placeholder="Enter your password (minimum 6 characters)"
         />
         {getFieldError('password') && (
-          <p className="mt-1 text-sm text-red-600">{getFieldError('password')}</p>
+          <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('password')}</p>
         )}
       </div>
 
-      <div>
+      <div className="fade-in-blur">
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Confirm Password *
         </label>
@@ -667,13 +748,13 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
           type="password"
           value={formData.confirmPassword}
           onChange={(e) => updateField('confirmPassword', e.target.value)}
-          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
-            getFieldError('confirmPassword') ? 'border-red-500' : 'border-gray-300'
+          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+            getFieldError('confirmPassword') ? 'border-red-300' : 'border-gray-300'
           }`}
           placeholder="Confirm your password"
         />
         {getFieldError('confirmPassword') && (
-          <p className="mt-1 text-sm text-red-600">{getFieldError('confirmPassword')}</p>
+          <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('confirmPassword')}</p>
         )}
       </div>
     </div>
@@ -694,20 +775,33 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
     }
   };
 
+  // Show loading while AuthContext is initializing
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-white flex items-center justify-center">
+        <div className="text-center fade-in-scale">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show success message only when auto-login fails
   if (showSuccess) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 to-white flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center border border-orange-100">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center border border-orange-100 fade-in-scale modal-content-blur">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 fade-in-scale">
             <CheckCircle className="w-8 h-8 text-green-600" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Registration Successful!</h2>
-          <p className="text-gray-600 mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4 fade-in-blur">Registration Successful!</h2>
+          <p className="text-gray-600 mb-6 fade-in-blur">
             Your account has been created successfully. You can now log in to access Career Week Account.
           </p>
           <button
-            onClick={onSwitchToLogin}
-            className="w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white py-3 px-4 rounded-lg font-medium hover:from-orange-600 hover:to-orange-700 transition-all duration-200 transform hover:scale-105"
+            onClick={() => navigate('/login')}
+            className="w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white py-3 px-4 rounded-lg font-medium hover:from-orange-600 hover:to-orange-700 transition-all duration-300 transform hover:scale-105 smooth-hover fade-in-blur"
           >
             Go to Login
           </button>
@@ -717,37 +811,56 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-white py-8 px-4">
-      <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Join Career Week</h1>
-          <p className="text-gray-600">Create your account to access exclusive events</p>
-        </div>
+    <div className="min-h-screen relative">
+      {/* Background Image */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0"
+        style={{
+          backgroundImage: 'url("https://ypiwfedtvgmazqcwolac.supabase.co/storage/v1/object/public/Assets/careercenter.png")',
+        }}
+      >
+        {/* Overlay for better readability */}
+        <div className="absolute inset-0 bg-black bg-opacity-10"></div>
+      </div>
 
+      <div className="relative z-10 py-8 px-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-8 fade-in-up-blur">
+            <h1 className="text-4xl font-bold text-white mb-2 drop-shadow-lg">Join Career Week</h1>
+            <p className="text-white drop-shadow">Create your attendee account to access exclusive events</p>
+          </div>
+        </div>
+          
         {/* Progress Steps */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between max-w-2xl mx-auto">
+        <div className="mb-8 fade-in-up-blur">
+          <div className="flex items-center max-w-2xl mx-auto">
             {sections.map((section, index) => (
-              <div key={section.id} className="flex items-center">
-                <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition-colors ${
-                  currentSection >= section.id
-                    ? 'bg-orange-500 border-orange-500 text-white'
-                    : 'bg-white border-gray-300 text-gray-400'
-                }`}>
-                  <section.icon className="w-5 h-5" />
+              <React.Fragment key={section.id}>
+                <div className="flex flex-col items-center">
+                  <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-300 ${
+                    currentSection >= section.id
+                      ? 'bg-orange-500 border-orange-500 text-white transform scale-110'
+                      : 'bg-white border-gray-300 text-gray-400'
+                  }`}>
+                    <section.icon className="w-5 h-5" />
+                  </div>
                 </div>
                 {index < sections.length - 1 && (
-                  <div className={`w-16 h-0.5 mx-2 transition-colors ${
+                  <div className={`flex-1 h-0.5 mx-2 transition-all duration-300 ${
                     currentSection > section.id ? 'bg-orange-500' : 'bg-gray-300'
                   }`} />
                 )}
-              </div>
+              </React.Fragment>
             ))}
           </div>
           <div className="flex justify-between max-w-2xl mx-auto mt-2">
             {sections.map(section => (
               <div key={section.id} className="text-xs text-center" style={{ width: '120px' }}>
-                <span className={currentSection >= section.id ? 'text-orange-600 font-medium' : 'text-gray-500'}>
+                <span className={`transition-all duration-300 ${
+                  currentSection >= section.id 
+                    ? 'text-white font-medium drop-shadow transform scale-105' 
+                    : 'text-white drop-shadow'
+                }`}>
                   {section.title}
                 </span>
               </div>
@@ -755,41 +868,43 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-2xl p-8 border border-orange-100">
+        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-2xl p-8 border border-orange-100 fade-in-up-blur modal-content-blur">
           {/* General Error */}
           {getFieldError('general') && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center">
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center fade-in-blur">
               <AlertCircle className="w-5 h-5 text-red-600 mr-3" />
               <p className="text-red-700">{getFieldError('general')}</p>
             </div>
           )}
 
           {/* Section Header */}
-          <div className="mb-8">
+          <div className="mb-8 fade-in-blur">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
               {sections[currentSection - 1].title}
             </h2>
             <div className="w-full bg-gray-200 rounded-full h-2">
               <div 
-                className="bg-gradient-to-r from-orange-500 to-orange-600 h-2 rounded-full transition-all duration-300"
+                className="bg-gradient-to-r from-orange-500 to-orange-600 h-2 rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${(currentSection / 4) * 100}%` }}
               />
             </div>
           </div>
 
           {/* Section Content */}
-          {renderSectionContent()}
+          <div className="stagger-children">
+            {renderSectionContent()}
+          </div>
 
           {/* Navigation Buttons */}
-          <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
+          <div className="flex justify-between mt-8 pt-6 border-t border-gray-200 fade-in-blur">
             <button
               type="button"
               onClick={prevSection}
               disabled={currentSection === 1}
-              className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
+              className={`px-6 py-3 rounded-lg font-medium transition-all duration-300 ${
                 currentSection === 1
                   ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300 smooth-hover transform hover:scale-105'
               }`}
             >
               Previous
@@ -799,7 +914,7 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
               <button
                 type="button"
                 onClick={nextSection}
-                className="px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg font-medium hover:from-orange-600 hover:to-orange-700 transition-all duration-200 transform hover:scale-105 flex items-center"
+                className="px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg font-medium hover:from-orange-600 hover:to-orange-700 transition-all duration-300 transform hover:scale-105 flex items-center smooth-hover"
               >
                 Next
                 <ChevronRight className="w-4 h-4 ml-2" />
@@ -808,7 +923,7 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
               <button
                 type="submit"
                 disabled={loading}
-                className="px-8 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg font-medium hover:from-orange-600 hover:to-orange-700 transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center"
+                className="px-8 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg font-medium hover:from-orange-600 hover:to-orange-700 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center smooth-hover"
               >
                 {loading ? (
                   <>
@@ -823,13 +938,13 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
           </div>
 
           {/* Login Link */}
-          <div className="text-center mt-6 pt-6 border-t border-gray-200">
+          <div className="text-center mt-6 pt-6 border-t border-gray-200 fade-in-blur">
             <p className="text-gray-600">
               Already have an account?{' '}
               <button
                 type="button"
-                onClick={onSwitchToLogin}
-                className="text-orange-600 hover:text-orange-700 font-medium transition-colors"
+                onClick={() => navigate('/login')}
+                className="text-orange-600 hover:text-orange-700 font-medium transition-colors duration-200 hover:underline"
               >
                 Sign in here
               </button>
@@ -840,5 +955,3 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSwitchToLo
     </div>
   );
 };
-
-export default RegistrationForm

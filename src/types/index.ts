@@ -1,4 +1,4 @@
-// types.ts - Fixed interface definitions
+// index.ts - Fixed interface definitions
 
 export interface RegistrationData {
   // Personal Information
@@ -14,7 +14,7 @@ export interface RegistrationData {
   university: string;
   customUniversity?: string;
   faculty: string;
-  degreeLevel: 'Student' | 'Graduate' | '';
+  degreeLevel: 'student' | 'graduate' | '';
   program: string;
   classYear?: string;
   
@@ -46,4 +46,16 @@ export interface ValidationError {
 export interface FileUpload {
   universityId?: File;
   resume?: File;
+}
+export interface VolunteerRegistrationData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  personalId: string;
+  faculty: string;
+  password: string;
+  confirmPassword: string;
+  role: string;
+  gender: string; // Add this line
 }
