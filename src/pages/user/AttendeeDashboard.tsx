@@ -330,7 +330,8 @@ const AttendeeDashboard: React.FC = () => {
 
           if (!sessionError && sessionData) {
             bookingsWithSessions.push({
-              ...booking,
+              session_id: booking.session_id,
+              booked_at: booking.scanned_at,
               session: sessionData
             });
           }
@@ -410,7 +411,7 @@ const AttendeeDashboard: React.FC = () => {
   };
 
   const isSessionFull = (session: Session): boolean => {
-    return session.max_attendees && session.current_bookings >= session.max_attendees;
+    return !!session.max_attendees && session.current_bookings >= session.max_attendees;
   };
 
   // New function to check if user has overlapping booking
