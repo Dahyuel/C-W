@@ -123,17 +123,31 @@ export const VolunteerAuthRegistration: React.FC<VolunteerAuthRegistrationProps>
 
   if (showSuccess) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-white flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center border border-orange-100 fade-in-scale">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CheckCircle className="w-8 h-8 text-green-600" />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Volunteer Account Created!</h2>
-          <p className="text-gray-600 mb-6">
-            Your volunteer account has been created successfully. Please complete your volunteer profile to continue.
-          </p>
-          <div className="animate-pulse">
-            <p className="text-orange-600 font-medium">Redirecting to volunteer profile setup...</p>
+      <div className="min-h-screen relative">
+        {/* Responsive Wallpaper */}
+        <div 
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0"
+          style={{
+            backgroundImage: 'url("/images/careercenter.png")',
+          }}
+        >
+          {/* Overlay for better readability */}
+          <div className="absolute inset-0 bg-black bg-opacity-20"></div>
+        </div>
+
+        {/* Success Message */}
+        <div className="relative z-10 flex items-center justify-center min-h-screen p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center border border-orange-100 fade-in-scale">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-8 h-8 text-green-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Volunteer Account Created!</h2>
+            <p className="text-gray-600 mb-6">
+              Your volunteer account has been created successfully. Please complete your volunteer profile to continue.
+            </p>
+            <div className="animate-pulse">
+              <p className="text-orange-600 font-medium">Redirecting to volunteer profile setup...</p>
+            </div>
           </div>
         </div>
       </div>
@@ -141,167 +155,181 @@ export const VolunteerAuthRegistration: React.FC<VolunteerAuthRegistrationProps>
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-white flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border border-orange-100 fade-in-scale">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Users className="w-8 h-8 text-orange-600" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Become a Volunteer</h1>
-          <p className="text-gray-600">Create your volunteer account to get started</p>
-        </div>
+    <div className="min-h-screen relative">
+      {/* Responsive Wallpaper */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0"
+        style={{
+          backgroundImage: 'url("/images/careercenter.png")',
+        }}
+      >
+        {/* Overlay for better readability */}
+        <div className="absolute inset-0 bg-black bg-opacity-20"></div>
+      </div>
 
-        {getFieldError('general') && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center fade-in-blur">
-            <AlertCircle className="w-5 h-5 text-red-600 mr-3" />
-            <p className="text-red-700">{getFieldError('general')}</p>
+      {/* Registration Form */}
+      <div className="relative z-10 flex items-center justify-center min-h-screen p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border border-orange-100 fade-in-scale">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Users className="w-8 h-8 text-orange-600" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Become a Volunteer</h1>
+            <p className="text-gray-600">Create your volunteer account to get started</p>
           </div>
-        )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="fade-in-blur">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                First Name *
-              </label>
-              <div className="relative">
-                <User className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+          {getFieldError('general') && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center fade-in-blur">
+              <AlertCircle className="w-5 h-5 text-red-600 mr-3" />
+              <p className="text-red-700">{getFieldError('general')}</p>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="fade-in-blur">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  First Name *
+                </label>
+                <div className="relative">
+                  <User className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={formData.firstName}
+                    onChange={(e) => updateField('firstName', e.target.value)}
+                    className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+                      getFieldError('firstName') ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                    placeholder="Enter first name"
+                  />
+                </div>
+                {getFieldError('firstName') && (
+                  <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('firstName')}</p>
+                )}
+              </div>
+
+              <div className="fade-in-blur">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Last Name *
+                </label>
                 <input
                   type="text"
-                  value={formData.firstName}
-                  onChange={(e) => updateField('firstName', e.target.value)}
-                  className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
-                    getFieldError('firstName') ? 'border-red-300' : 'border-gray-300'
+                  value={formData.lastName}
+                  onChange={(e) => updateField('lastName', e.target.value)}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+                    getFieldError('lastName') ? 'border-red-300' : 'border-gray-300'
                   }`}
-                  placeholder="Enter first name"
+                  placeholder="Enter last name"
+                />
+                {getFieldError('lastName') && (
+                  <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('lastName')}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="fade-in-blur">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Email Address *
+              </label>
+              <div className="relative">
+                <Mail className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => updateField('email', e.target.value)}
+                  className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+                    getFieldError('email') ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                  placeholder="Enter your email"
                 />
               </div>
-              {getFieldError('firstName') && (
-                <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('firstName')}</p>
+              {getFieldError('email') && (
+                <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('email')}</p>
               )}
             </div>
 
             <div className="fade-in-blur">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Last Name *
+                Password *
               </label>
-              <input
-                type="text"
-                value={formData.lastName}
-                onChange={(e) => updateField('lastName', e.target.value)}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
-                  getFieldError('lastName') ? 'border-red-300' : 'border-gray-300'
-                }`}
-                placeholder="Enter last name"
-              />
-              {getFieldError('lastName') && (
-                <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('lastName')}</p>
+              <div className="relative">
+                <Lock className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                <input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => updateField('password', e.target.value)}
+                  className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+                    getFieldError('password') ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                  placeholder="Create a password"
+                />
+              </div>
+              {getFieldError('password') && (
+                <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('password')}</p>
               )}
             </div>
-          </div>
 
-          <div className="fade-in-blur">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email Address *
-            </label>
-            <div className="relative">
-              <Mail className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-              <input
-                type="email"
-                value={formData.email}
-                onChange={(e) => updateField('email', e.target.value)}
-                className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
-                  getFieldError('email') ? 'border-red-300' : 'border-gray-300'
-                }`}
-                placeholder="Enter your email"
-              />
+            <div className="fade-in-blur">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Confirm Password *
+              </label>
+              <div className="relative">
+                <Lock className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                <input
+                  type="password"
+                  value={formData.confirmPassword}
+                  onChange={(e) => updateField('confirmPassword', e.target.value)}
+                  className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
+                    getFieldError('confirmPassword') ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                  placeholder="Confirm your password"
+                />
+              </div>
+              {getFieldError('confirmPassword') && (
+                <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('confirmPassword')}</p>
+              )}
             </div>
-            {getFieldError('email') && (
-              <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('email')}</p>
-            )}
-          </div>
 
-          <div className="fade-in-blur">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Password *
-            </label>
-            <div className="relative">
-              <Lock className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-              <input
-                type="password"
-                value={formData.password}
-                onChange={(e) => updateField('password', e.target.value)}
-                className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
-                  getFieldError('password') ? 'border-red-300' : 'border-gray-300'
-                }`}
-                placeholder="Create a password"
-              />
-            </div>
-            {getFieldError('password') && (
-              <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('password')}</p>
-            )}
-          </div>
-
-          <div className="fade-in-blur">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Confirm Password *
-            </label>
-            <div className="relative">
-              <Lock className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-              <input
-                type="password"
-                value={formData.confirmPassword}
-                onChange={(e) => updateField('confirmPassword', e.target.value)}
-                className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
-                  getFieldError('confirmPassword') ? 'border-red-300' : 'border-gray-300'
-                }`}
-                placeholder="Confirm your password"
-              />
-            </div>
-            {getFieldError('confirmPassword') && (
-              <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('confirmPassword')}</p>
-            )}
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white py-3 px-4 rounded-lg font-medium hover:from-orange-600 hover:to-orange-700 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center smooth-hover"
-          >
-            {loading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Creating Volunteer Account...
-              </>
-            ) : (
-              'Create Volunteer Account'
-            )}
-          </button>
-        </form>
-
-        <div className="text-center mt-6 pt-6 border-t border-gray-200 fade-in-blur">
-          <p className="text-gray-600">
-            Already have an account?{' '}
             <button
-              type="button"
-              onClick={() => navigate('/login')}
-              className="text-orange-600 hover:text-orange-700 font-medium transition-colors duration-200 hover:underline"
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white py-3 px-4 rounded-lg font-medium hover:from-orange-600 hover:to-orange-700 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center smooth-hover"
             >
-              Sign in here
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Creating Volunteer Account...
+                </>
+              ) : (
+                'Create Volunteer Account'
+              )}
             </button>
-          </p>
-        </div>
+          </form>
 
-        <div className="text-center mt-4 fade-in-blur">
-          <p className="text-gray-600 text-sm">
-            Want to join as an attendee?{' '}
-            <Link
-              to="/auth-register"
-              className="text-orange-600 hover:text-orange-700 font-medium transition-colors duration-200 hover:underline"
-            >
-              Register as attendee
-            </Link>
-          </p>
+          <div className="text-center mt-6 pt-6 border-t border-gray-200 fade-in-blur">
+            <p className="text-gray-600">
+              Already have an account?{' '}
+              <button
+                type="button"
+                onClick={() => navigate('/login')}
+                className="text-orange-600 hover:text-orange-700 font-medium transition-colors duration-200 hover:underline"
+              >
+                Sign in here
+              </button>
+            </p>
+          </div>
+
+          <div className="text-center mt-4 fade-in-blur">
+            <p className="text-gray-600 text-sm">
+              Want to join as an attendee?{' '}
+              <Link
+                to="/auth-register"
+                className="text-orange-600 hover:text-orange-700 font-medium transition-colors duration-200 hover:underline"
+              >
+                Register as attendee
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
     </div>
