@@ -84,46 +84,23 @@ export const VolunteerRegistration: React.FC = () => {
     { value: 'female', label: 'Female' }
   ];
 
- // In VolunteerRegistration.tsx - Update the useEffect
-useEffect(() => {
-  const checkProfileAndRedirect = async () => {
-    if (!authLoading) {
-      if (!isAuthenticated) {
+  useEffect(() => {
+    const checkProfileAndRedirect = async () => {
+      if (!authLoading && isAuthenticated) {
+        // Only redirect if profile is complete AND user has a specific role (not just 'volunteer')
+        if (profile?.profile_complete && profile.role && profile.role !== 'volunteer') {
+          console.log('Profile complete with specific role, redirecting:', profile.role);
+          navigate(getRoleBasedRedirect(), { replace: true });
+        }
+        // Otherwise, stay on the form to let user complete registration
+      } else if (!authLoading && !isAuthenticated) {
         console.log('Not authenticated, redirecting to login');
         navigate('/login', { replace: true });
-        return;
       }
-      
-      if (user && !profile) {
-        console.log('User authenticated but profile not loaded, attempting to fetch...');
-        await refreshProfile();
-        
-        if (profile) {
-          console.log('Profile found after refresh:', profile.role);
-        } else {
-          console.log('Profile still not found - user needs to complete registration');
-          return; // STAYS ON FORM
-        }
-      }
-      
-      if (profile) {
-        const isProfileComplete = profile.personal_id && profile.phone && profile.profile_complete;
-        
-        // If profile is complete AND user has a specific volunteer role (not just 'volunteer')
-        if (isProfileComplete && profile.role !== 'volunteer') {
-          console.log('Profile complete with specific role, redirecting to dashboard:', profile.role);
-          navigate(getRoleBasedRedirect(), { replace: true });
-        } else if (isProfileComplete && profile.role === 'volunteer') {
-          // User has initial volunteer role but profile is marked complete - stay on form to select specific role
-          console.log('User has initial volunteer role but needs to select specific role');
-          // Don't redirect - let them complete the form
-        }
-      }
-    }
-  };
-
-  checkProfileAndRedirect();
-}, [isAuthenticated, profile, authLoading, navigate, getRoleBasedRedirect, user, refreshProfile]);
+    };
+  
+    checkProfileAndRedirect();
+  }, [isAuthenticated, profile, authLoading, navigate, getRoleBasedRedirect]);
 
   // Update form with profile data
   useEffect(() => {
@@ -215,16 +192,30 @@ useEffect(() => {
 
     return validationErrors;
   };
-
-  const nextSection = () => {
+  const handleFormKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && currentSection < 2) {
+      e.preventDefault(); // Prevent form submission on Enter
+      nextSection();
+    }
+  };
+  const nextSection = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    console.log('Next section clicked, current section:', currentSection);
+    
     const sectionErrors = validateSection(currentSection);
     if (sectionErrors.length > 0) {
+      console.log('Section errors:', sectionErrors);
       setErrors(sectionErrors);
       return;
     }
     
     setErrors([]);
     if (currentSection < 2) {
+      console.log('Moving to section:', currentSection + 1);
       setCurrentSection(currentSection + 1);
     }
   };
@@ -237,10 +228,16 @@ useEffect(() => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation(); // Add this to prevent event bubbling
     
+    console.log('Form submission started...');
+    
+    // Validate all sections
     const allErrors = [1, 2].flatMap(section => validateSection(section));
     if (allErrors.length > 0) {
+      console.log('Validation errors found:', allErrors);
       setErrors(allErrors);
+      // Find the first section with errors
       const firstErrorSection = Math.min(...allErrors.map(error => {
         if (['firstName', 'lastName', 'phone', 'personalId', 'faculty', 'gender'].includes(error.field)) return 1;
         if (['role', 'tlTeam'].includes(error.field)) return 2;
@@ -250,6 +247,8 @@ useEffect(() => {
       return;
     }
   
+    console.log('All validation passed, proceeding with submission...');
+    
     setLoading(true);
     setErrors([]);
     setShowAuthTransition(true);
@@ -462,27 +461,34 @@ useEffect(() => {
           Please select the volunteer role you're interested in. This helps us assign you to the most suitable position.
         </p>
       </div>
-
+  
       <div className="fade-in-blur">
         <label className="block text-sm font-medium text-gray-700 mb-4">
           Preferred Volunteer Role *
         </label>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {roleOptions.map((option) => (
-            <label
+            <div
               key={option.value}
               className={`relative flex cursor-pointer rounded-lg border p-4 focus:outline-none transition-all duration-300 ${
                 formData.role === option.value
-                  ? 'border-orange-500 bg-orange-50 transform scale-[1.02]'
+                  ? 'border-orange-500 bg-orange-50 transform scale-[1.02] ring-2 ring-orange-500'
                   : 'border-gray-300 bg-white hover:bg-gray-50 smooth-hover'
               }`}
+              onClick={() => {
+                console.log('Role selected:', option.value);
+                updateField('role', option.value);
+              }}
             >
               <input
                 type="radio"
                 name="role"
                 value={option.value}
                 checked={formData.role === option.value}
-                onChange={(e) => updateField('role', e.target.value)}
+                onChange={(e) => {
+                  console.log('Radio change:', e.target.value);
+                  updateField('role', e.target.value);
+                }}
                 className="sr-only"
               />
               <div className="flex w-full items-center justify-between">
@@ -495,14 +501,16 @@ useEffect(() => {
                   <CheckCircle className="h-6 w-6" />
                 </div>
               </div>
-            </label>
+            </div>
           ))}
         </div>
         {getFieldError('role') && (
           <p className="mt-2 text-sm text-red-600 fade-in-blur">{getFieldError('role')}</p>
         )}
       </div>
-
+  
+  
+      {/* Team Leader Section - ADD THIS COMPLETE SECTION */}
       {formData.role === 'team_leader' && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 fade-in-scale">
           <div className="flex items-center mb-4">
@@ -535,15 +543,8 @@ useEffect(() => {
           </div>
         </div>
       )}
-
-      <div className="bg-green-50 border border-green-200 rounded-lg p-4 fade-in-blur">
-        <p className="text-sm text-green-800">
-          <strong>Note:</strong> Specific role assignments and team placements will be confirmed by the event organizers after registration.
-        </p>
-      </div>
     </div>
   );
-
   const renderSectionContent = () => {
     switch (currentSection) {
       case 1:
@@ -648,7 +649,7 @@ useEffect(() => {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-2xl p-8 border border-orange-100 fade-in-up-blur modal-content-blur">
+        <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="bg-white rounded-2xl shadow-2xl p-8 border border-orange-100 fade-in-up-blur modal-content-blur">
           {getFieldError('general') && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center fade-in-blur">
               <AlertCircle className="w-5 h-5 text-red-600 mr-3" />
@@ -687,30 +688,30 @@ useEffect(() => {
             </button>
 
             {currentSection < 2 ? (
-              <button
-                type="button"
-                onClick={nextSection}
-                className="px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg font-medium hover:from-orange-600 hover:to-orange-700 transition-all duration-300 transform hover:scale-105 flex items-center smooth-hover"
-              >
-                Next
-                <ChevronRight className="w-4 h-4 ml-2" />
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-8 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg font-medium hover:from-orange-600 hover:to-orange-700 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center smooth-hover"
-              >
-                {loading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Completing Profile...
-                  </>
-                ) : (
-                  'Complete Profile'
-                )}
-              </button>
-            )}
+  <button
+    type="button" // Make sure this is explicitly set
+    onClick={nextSection}
+    className="px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg font-medium hover:from-orange-600 hover:to-orange-700 transition-all duration-300 transform hover:scale-105 flex items-center smooth-hover"
+  >
+    Next
+    <ChevronRight className="w-4 h-4 ml-2" />
+  </button>
+) : (
+  <button
+    type="submit" // Only the final button should be type="submit"
+    disabled={loading}
+    className="px-8 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg font-medium hover:from-orange-600 hover:to-orange-700 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center smooth-hover"
+  >
+    {loading ? (
+      <>
+        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+        Completing Profile...
+      </>
+    ) : (
+      'Complete Profile'
+    )}
+  </button>
+)}
           </div>
         </form>
       </div>
