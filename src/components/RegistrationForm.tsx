@@ -1,4 +1,4 @@
-// components/RegistrationForm.tsx - UPDATED with error popups
+// components/RegistrationForm.tsx - UPDATED with error popups and modified universities
 import React, { useState, useEffect } from 'react';
 import { User, GraduationCap, ChevronRight, CheckCircle, AlertCircle, FileText, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -170,6 +170,16 @@ export const RegistrationForm: React.FC = () => {
     { id: 1, title: 'Personal Information', icon: User },
     { id: 2, title: 'Academic Information', icon: GraduationCap },
     { id: 3, title: 'Event & Documents', icon: FileText }
+  ];
+
+  // Updated universities list
+  const universities = [
+    'Ain Shams University',
+    'Helwan University',
+    'Canadian Ahram University',
+    'Banha University',
+    'Cairo University',
+    'Other'
   ];
 
   // Show error popup function
@@ -685,7 +695,7 @@ export const RegistrationForm: React.FC = () => {
           }`}
         >
           <option value="">Select university</option>
-          {UNIVERSITIES.map(uni => (
+          {universities.map(uni => (
             <option key={uni} value={uni}>{uni}</option>
           ))}
         </select>
@@ -889,7 +899,7 @@ export const RegistrationForm: React.FC = () => {
             <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('resume')}</p>
           )}
         </div>
-  
+
         {/* Updated Storage Bucket Warning */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex items-center">
@@ -902,6 +912,7 @@ export const RegistrationForm: React.FC = () => {
       </div>
     </div>
   );
+
   const renderSectionContent = () => {
     switch (currentSection) {
       case 1:
