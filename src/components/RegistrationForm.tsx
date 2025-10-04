@@ -1,4 +1,4 @@
-// components/RegistrationForm.tsx - UPDATED with error popups and modified universities
+// components/RegistrationForm.tsx - FIXED: Only submits on "Complete Profile", CV optional, ID required, name fields disabled
 import React, { useState, useEffect } from 'react';
 import { User, GraduationCap, ChevronRight, CheckCircle, AlertCircle, FileText, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -32,7 +32,7 @@ const ErrorPopup: React.FC<{
   useEffect(() => {
     const timer = setTimeout(() => {
       onClose();
-    }, 5000); // Auto-close after 5 seconds
+    }, 5000);
 
     return () => clearTimeout(timer);
   }, [onClose]);
@@ -90,6 +90,7 @@ const FileUpload: React.FC<{
       onFileSelect(file);
     }
   };
+  
   return (
     <div className="space-y-2 fade-in-blur">
       <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-all duration-300 ${
@@ -162,8 +163,6 @@ export const RegistrationForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showAuthTransition, setShowAuthTransition] = useState(false);
-  
-  // NEW: State for error popups
   const [errorPopup, setErrorPopup] = useState<{ message: string; type?: 'error' | 'warning' } | null>(null);
 
   const sections = [
@@ -172,7 +171,6 @@ export const RegistrationForm: React.FC = () => {
     { id: 3, title: 'Event & Documents', icon: FileText }
   ];
 
-  // Updated universities list
   const universities = [
     'Ain Shams University',
     'Helwan University',
@@ -182,17 +180,14 @@ export const RegistrationForm: React.FC = () => {
     'Other'
   ];
 
-  // Show error popup function
   const showErrorPopup = (message: string, type: 'error' | 'warning' = 'error') => {
     setErrorPopup({ message, type });
   };
 
-  // Close error popup function
   const closeErrorPopup = () => {
     setErrorPopup(null);
   };
 
-  // Update the useEffect to handle profile checks
   useEffect(() => {
     const checkProfileAndRedirect = async () => {
       if (!authLoading) {
@@ -222,6 +217,7 @@ export const RegistrationForm: React.FC = () => {
           navigate(getRoleBasedRedirect(), { replace: true });
         } else if (profile) {
           console.log('Profile exists but profile_complete=false, staying on registration form');
+          // Pre-fill name and email from auth (read-only)
           if (profile.first_name && !formData.firstName) {
             setFormData(prev => ({ ...prev, firstName: profile.first_name }));
           }
@@ -249,7 +245,6 @@ export const RegistrationForm: React.FC = () => {
     formData.email
   ]);
 
-  // Additional useEffect to handle profile updates after registration
   useEffect(() => {
     if (user && profile) {
       console.log('Profile loaded, updating form data:', {
@@ -273,7 +268,6 @@ export const RegistrationForm: React.FC = () => {
     }
   }, [user, profile]);
 
-  // Safety effect to prevent infinite loading
   useEffect(() => {
     const timeout = setTimeout(() => {
       if (authLoading) {
@@ -296,11 +290,9 @@ export const RegistrationForm: React.FC = () => {
     const validationErrors: ValidationError[] = [];
 
     if (section === 1) {
-      const firstNameError = validateName(formData.firstName, 'First name');
-      if (firstNameError) validationErrors.push({ field: 'firstName', message: firstNameError });
-
-      const lastNameError = validateName(formData.lastName, 'Last name');
-      if (lastNameError) validationErrors.push({ field: 'lastName', message: lastNameError });
+      // First name and last name come from auth - skip validation
+      if (!formData.firstName) validationErrors.push({ field: 'firstName', message: 'First name is required' });
+      if (!formData.lastName) validationErrors.push({ field: 'lastName', message: 'Last name is required' });
 
       if (!formData.gender) validationErrors.push({ field: 'gender', message: 'Gender is required' });
       if (!formData.nationality) validationErrors.push({ field: 'nationality', message: 'Nationality is required' });
@@ -314,6 +306,9 @@ export const RegistrationForm: React.FC = () => {
 
     if (section === 2) {
       if (!formData.university) validationErrors.push({ field: 'university', message: 'University is required' });
+      if (formData.university === 'Other' && !formData.customUniversity) {
+        validationErrors.push({ field: 'customUniversity', message: 'Please specify your university' });
+      }
       if (!formData.faculty) validationErrors.push({ field: 'faculty', message: 'Faculty is required' });
       if (!formData.degreeLevel) validationErrors.push({ field: 'degreeLevel', message: 'Degree level is required' });
       if (!formData.program) validationErrors.push({ field: 'program', message: 'Program/Major is required' });
@@ -332,8 +327,11 @@ export const RegistrationForm: React.FC = () => {
         }
       }
           
-    if (!fileUploads.universityId) validationErrors.push({ field: 'universityId', message: 'University ID is required' });
-    if (!fileUploads.resume) validationErrors.push({ field: 'resume', message: 'CV/Resume is required' });
+      // University ID is REQUIRED
+      if (!fileUploads.universityId) {
+        validationErrors.push({ field: 'universityId', message: 'University ID is required' });
+      }
+      // CV/Resume is OPTIONAL - no validation needed
     }
 
     return validationErrors;
@@ -344,7 +342,6 @@ export const RegistrationForm: React.FC = () => {
     if (sectionErrors.length > 0) {
       setErrors(sectionErrors);
       
-      // Show first error as popup
       if (sectionErrors.length > 0) {
         showErrorPopup(sectionErrors[0].message, 'error');
       }
@@ -352,6 +349,8 @@ export const RegistrationForm: React.FC = () => {
       return;
     }
     
+    // IMPORTANT: Only clear errors and move to next section
+    // NO DATABASE UPDATE HERE - data stays in React state
     setErrors([]);
     if (currentSection < 3) {
       setCurrentSection(currentSection + 1);
@@ -374,7 +373,6 @@ export const RegistrationForm: React.FC = () => {
     if (allErrors.length > 0) {
       setErrors(allErrors);
       
-      // Show first error as popup
       if (allErrors.length > 0) {
         showErrorPopup(allErrors[0].message, 'error');
       }
@@ -384,7 +382,7 @@ export const RegistrationForm: React.FC = () => {
         phone: 1, personalId: 1,
         university: 2, faculty: 2, degreeLevel: 2,
         program: 2, classYear: 2,
-        howDidYouHear: 3, volunteerId: 3,
+        howDidYouHear: 3, volunteerId: 3, universityId: 3
       };
 
       const firstErrorSection = Math.min(
@@ -394,6 +392,7 @@ export const RegistrationForm: React.FC = () => {
       return;
     }
 
+    // THIS IS THE ONLY PLACE WHERE WE UPDATE THE DATABASE
     setLoading(true);
     setErrors([]);
     setShowAuthTransition(true);
@@ -426,10 +425,12 @@ export const RegistrationForm: React.FC = () => {
         updated_at: new Date().toISOString()
       };
 
-      console.log("🚀 Starting attendee profile completion...");
+      console.log("Starting attendee profile completion...");
 
-      // File uploads (optional)
+      // File uploads
       const fileUpdates: { university_id_path?: string; cv_path?: string } = {};
+      
+      // University ID is REQUIRED
       if (fileUploads.universityId) {
         const uniResult = await uploadFile(
           'university-ids',
@@ -437,16 +438,22 @@ export const RegistrationForm: React.FC = () => {
           fileUploads.universityId
         );
         if (uniResult && 'error' in uniResult && uniResult.error) {
-          console.warn('⚠️ University ID upload failed:', uniResult.error.message);
+          console.error('University ID upload failed:', uniResult.error.message);
+          showErrorPopup('Failed to upload University ID. Please try again.', 'error');
+          await cleanupUploadedFiles(uploadedFiles);
+          setShowAuthTransition(false);
+          setLoading(false);
+          return;
         } else if (uniResult && 'data' in uniResult && uniResult.data) {
           fileUpdates.university_id_path = uniResult.data.path;
           if (uniResult.data.path) {
             uploadedFiles.push({ bucket: 'university-ids', path: uniResult.data.path });
           }
-          console.log("✅ University ID uploaded successfully");
+          console.log("University ID uploaded successfully");
         }
       }
 
+      // CV/Resume is OPTIONAL
       if (fileUploads.resume) {
         const resumeResult = await uploadFile(
           'cvs',
@@ -454,23 +461,23 @@ export const RegistrationForm: React.FC = () => {
           fileUploads.resume
         );
         if (resumeResult && 'error' in resumeResult && resumeResult.error) {
-          console.warn('⚠️ Resume upload failed:', resumeResult.error.message);
+          console.warn('Resume upload failed:', resumeResult.error.message);
+          // Don't block registration if CV upload fails
         } else if (resumeResult && 'data' in resumeResult && resumeResult.data) {
           fileUpdates.cv_path = resumeResult.data.path;
           if (resumeResult.data.path) {
             uploadedFiles.push({ bucket: 'cvs', path: resumeResult.data.path });
           }
-          console.log("✅ Resume uploaded successfully");
+          console.log("Resume uploaded successfully");
         }
       }
 
-      // Check if profile exists and UPDATE or INSERT accordingly
       const profileDataWithFiles = {
         ...profileData,
         ...fileUpdates,
       };
 
-      console.log("👤 Checking if profile exists...");
+      console.log("Checking if profile exists...");
       
       const { data: existingProfile, error: checkError } = await supabase
         .from('users_profiles')
@@ -479,20 +486,20 @@ export const RegistrationForm: React.FC = () => {
         .single();
 
       if (checkError && !existingProfile) {
-        console.warn('⚠️ Profile lookup error (continuing with insert if needed):', checkError);
+        console.warn('Profile lookup error (continuing with insert if needed):', checkError);
       }
 
       let updateError = null;
 
       if (existingProfile) {
-        console.log("📝 Updating existing profile...");
+        console.log("Updating existing profile...");
         const { error } = await supabase
           .from('users_profiles')
           .update(profileDataWithFiles)
           .eq('id', user.id);
         updateError = error;
       } else {
-        console.log("🆕 Creating new profile...");
+        console.log("Creating new profile...");
         const { error } = await supabase
           .from('users_profiles')
           .insert([profileDataWithFiles]);
@@ -500,9 +507,8 @@ export const RegistrationForm: React.FC = () => {
       }
 
       if (updateError) {
-        console.error("❌ Profile operation failed:", updateError);
+        console.error("Profile operation failed:", updateError);
         
-        // SHOW ERROR AS POPUP INSTEAD OF INLINE
         if (updateError.code === '23505' && updateError.message?.includes('personal_id')) {
           showErrorPopup("This Personal ID is already registered. Please use a different ID.", 'error');
         } else {
@@ -514,10 +520,10 @@ export const RegistrationForm: React.FC = () => {
         return;
       }
 
-      console.log("✅ Profile saved successfully!");
+      console.log("Profile saved successfully!");
       await refreshProfile();
 
-      console.log("🎉 Attendee registration completed successfully!");
+      console.log("Attendee registration completed successfully!");
       setShowAuthTransition(false);
       setShowSuccess(true);
 
@@ -526,10 +532,9 @@ export const RegistrationForm: React.FC = () => {
       }, 3000);
 
     } catch (error: unknown) {
-      console.error("💥 Unexpected error during profile completion:", error);
+      console.error("Unexpected error during profile completion:", error);
       await cleanupUploadedFiles(uploadedFiles);
       
-      // SHOW ERROR AS POPUP
       showErrorPopup("An unexpected error occurred. Please try again or contact support if the problem persists.", 'error');
       
       setShowAuthTransition(false);
@@ -547,38 +552,30 @@ export const RegistrationForm: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="fade-in-blur">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            First Name *
+            First Name
           </label>
           <input
             type="text"
             value={formData.firstName}
-            onChange={(e) => updateField('firstName', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
-              getFieldError('firstName') ? 'border-red-300' : 'border-gray-300'
-            }`}
-            placeholder="Enter your first name"
+            disabled
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
+            placeholder="First name from account"
           />
-          {getFieldError('firstName') && (
-            <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('firstName')}</p>
-          )}
+          <p className="mt-1 text-sm text-gray-500">Name cannot be changed</p>
         </div>
 
         <div className="fade-in-blur">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Last Name *
+            Last Name
           </label>
           <input
             type="text"
             value={formData.lastName}
-            onChange={(e) => updateField('lastName', e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 ${
-              getFieldError('lastName') ? 'border-red-300' : 'border-gray-300'
-            }`}
-            placeholder="Enter your last name"
+            disabled
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
+            placeholder="Last name from account"
           />
-          {getFieldError('lastName') && (
-            <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('lastName')}</p>
-          )}
+          <p className="mt-1 text-sm text-gray-500">Name cannot be changed</p>
         </div>
       </div>
 
@@ -632,7 +629,7 @@ export const RegistrationForm: React.FC = () => {
           type="email"
           value={formData.email}
           disabled
-          className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
+          className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
           placeholder="Your email address"
         />
         <p className="mt-1 text-sm text-gray-500">Email cannot be changed</p>
@@ -854,12 +851,12 @@ export const RegistrationForm: React.FC = () => {
       </div>
   
       <div className="space-y-4 fade-in-blur">
-        <h3 className="text-lg font-medium text-gray-900">Documents (Optional)</h3>
+        <h3 className="text-lg font-medium text-gray-900">Required Documents</h3>
         
-        {/* University ID Upload - Now Optional */}
+        {/* University ID Upload - REQUIRED */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            University ID (Optional)
+            University ID *
           </label>
           <FileUpload
             accept=".jpg,.jpeg,.png,.pdf"
@@ -878,7 +875,7 @@ export const RegistrationForm: React.FC = () => {
           )}
         </div>
   
-        {/* CV/Resume Upload - Now Optional */}
+        {/* CV/Resume Upload - OPTIONAL */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             CV/Resume (Optional)
@@ -893,20 +890,19 @@ export const RegistrationForm: React.FC = () => {
             onFileRemove={() => setFileUploads(prev => ({ ...prev, resume: undefined }))}
             label="Upload CV/Resume (PDF, DOC, DOCX - Max 10MB)"
             currentFile={fileUploads.resume}
-            required={true}
+            required={false}
           />
-          {getFieldError('resume') && (
-            <p className="mt-1 text-sm text-red-600 fade-in-blur">{getFieldError('resume')}</p>
-          )}
         </div>
 
-        {/* Updated Storage Bucket Warning */}
+        {/* Info Notice */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <AlertCircle className="w-5 h-5 text-blue-600 mr-2" />
-            <p className="text-blue-800 text-sm">
-              <strong>Note:</strong> File uploads are optional. You can upload these documents later if needed.
-            </p>
+          <div className="flex items-start">
+            <AlertCircle className="w-5 h-5 text-blue-600 mr-2 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-blue-800 text-sm">
+                <strong>Note:</strong> University ID is required. CV/Resume is optional and can be uploaded later if needed.
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -926,7 +922,6 @@ export const RegistrationForm: React.FC = () => {
     }
   };
 
-  // Show loading while AuthContext is initializing
   if (authLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 to-white flex items-center justify-center">
@@ -938,7 +933,6 @@ export const RegistrationForm: React.FC = () => {
     );
   }
 
-  // Show success message
   if (showSuccess) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 to-white flex items-center justify-center p-4">
@@ -960,7 +954,6 @@ export const RegistrationForm: React.FC = () => {
 
   return (
     <div className="min-h-screen relative">
-      {/* Error Popup */}
       {errorPopup && (
         <ErrorPopup 
           message={errorPopup.message} 
@@ -969,13 +962,11 @@ export const RegistrationForm: React.FC = () => {
         />
       )}
 
-      {/* Auth Transition Overlay */}
       <AuthTransition 
         isLoading={showAuthTransition}
         message="Completing your profile..."
       />
 
-      {/* Background Image */}
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0"
         style={{
@@ -993,7 +984,6 @@ export const RegistrationForm: React.FC = () => {
           </div>
         </div>
           
-        {/* Progress Steps */}
         <div className="mb-8 fade-in-up-blur">
           <div className="flex items-center max-w-2xl mx-auto">
             {sections.map((section, index) => (
@@ -1031,7 +1021,6 @@ export const RegistrationForm: React.FC = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-2xl p-8 border border-orange-100 fade-in-up-blur modal-content-blur">
-          {/* Section Header */}
           <div className="mb-8 fade-in-blur">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
               {sections[currentSection - 1].title}
@@ -1044,12 +1033,10 @@ export const RegistrationForm: React.FC = () => {
             </div>
           </div>
 
-          {/* Section Content */}
           <div className="stagger-children">
             {renderSectionContent()}
           </div>
 
-          {/* Navigation Buttons */}
           <div className="flex justify-between mt-8 pt-6 border-t border-gray-200 fade-in-blur">
             <button
               type="button"
