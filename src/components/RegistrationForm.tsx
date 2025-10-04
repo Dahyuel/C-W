@@ -418,7 +418,7 @@ export const RegistrationForm: React.FC = () => {
         program: formData.program,
         class: formData.degreeLevel === 'student' ? formData.classYear : null,
         how_did_hear_about_event: formData.howDidYouHear,
-        volunteer_id: formData.volunteerId?.trim() || null,
+        reg_id: formData.volunteerId?.trim() || null, // ← CHANGED FROM volunteer_id TO reg_id
         university_id_path: null,
         cv_path: null,
         profile_complete: true,
@@ -475,6 +475,7 @@ export const RegistrationForm: React.FC = () => {
       const profileDataWithFiles = {
         ...profileData,
         ...fileUpdates,
+        reg_id: formData.volunteerId?.trim() || null
       };
 
       console.log("Checking if profile exists...");
