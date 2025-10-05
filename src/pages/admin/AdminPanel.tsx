@@ -919,33 +919,126 @@ export function AdminPanel() {
         setLoading(false);
       }
     };
-
     const fetchRegistrationStats = async () => {
-      let dateFilter: { created_at?: string } = {};
-      if (timeRange === 'today') {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        dateFilter = { created_at: `gte.${today.toISOString()}` };
-      } else if (timeRange === 'week') {
-        const weekAgo = new Date();
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        dateFilter = { created_at: `gte.${weekAgo.toISOString()}` };
+      try {
+        let query = supabase
+          .from('users_profiles')
+          .select('*', { count: 'exact' });
+    
+        // Apply date filters if needed
+        if (timeRange === 'today') {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          // Format dates to match PostgreSQL timestamp format
+          const todayStart = today.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '+00');
+          const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '+00');
+          
+          console.log('Today filter:', { todayStart, todayEnd });
+          
+          query = query.gte('created_at', todayStart)
+                      .lt('created_at', todayEnd);
+        } else if (timeRange === 'week') {
+          const weekAgo = new Date();
+          weekAgo.setDate(weekAgo.getDate() - 7);
+          weekAgo.setHours(0, 0, 0, 0);
+          
+          // Format date to match PostgreSQL timestamp format
+          const weekAgoStart = weekAgo.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '+00');
+          
+          console.log('Week filter:', { weekAgoStart });
+          
+          query = query.gte('created_at', weekAgoStart);
+        }
+    
+        const { data: users, error, count } = await query;
+    
+        if (error) {
+          console.error('Query error:', error);
+          throw error;
+        }
+    
+        // For "All Time", we need to ensure we get all users
+        // If we have a count but limited data, we need to fetch all pages
+        let allUsers = users || [];
+        
+        if (timeRange === 'all' && count && count > 1000) {
+          // Fetch all users with pagination
+          const pageSize = 1000;
+          const totalPages = Math.ceil(count / pageSize);
+          allUsers = [];
+          
+          for (let page = 0; page < totalPages; page++) {
+            const { data: pageUsers, error: pageError } = await supabase
+              .from('users_profiles')
+              .select('*')
+              .range(page * pageSize, (page + 1) * pageSize - 1);
+              
+            if (pageError) throw pageError;
+            if (pageUsers) allUsers = [...allUsers, ...pageUsers];
+          }
+        }
+    
+        console.log(`Fetched ${allUsers.length} users for time range: ${timeRange}`);
+        
+        // Debug: Check dates of fetched users
+        if (allUsers.length > 0) {
+          const sampleDates = allUsers.slice(0, 3).map(u => u.created_at);
+          console.log('Sample created_at dates:', sampleDates);
+        }
+    
+        const stats = processUserStatistics(allUsers as UserProfileItem[]);
+        setStatsData(prev => ({ ...prev, ...stats } as StatsData));
+      } catch (error) {
+        console.error('Error fetching registration stats:', error);
+        // Fallback: try to get just the count if the detailed query fails
+        try {
+          let countQuery = supabase
+            .from('users_profiles')
+            .select('*', { count: 'exact', head: true });
+    
+          if (timeRange === 'today') {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayStart = today.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '+00');
+            const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '+00');
+            
+            countQuery = countQuery.gte('created_at', todayStart)
+                                  .lt('created_at', todayEnd);
+          } else if (timeRange === 'week') {
+            const weekAgo = new Date();
+            weekAgo.setDate(weekAgo.getDate() - 7);
+            weekAgo.setHours(0, 0, 0, 0);
+            const weekAgoStart = weekAgo.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '+00');
+            
+            countQuery = countQuery.gte('created_at', weekAgoStart);
+          }
+    
+          const { count, error: countError } = await countQuery;
+          
+          if (!countError && count !== null) {
+            console.log(`Fallback count for ${timeRange}:`, count);
+            setStatsData(prev => ({
+              ...prev,
+              totalRegistrations: count,
+              students: 0,
+              graduates: 0,
+              currentInEvent: 0,
+              currentInBuilding: 0,
+              universities: [],
+              faculties: [],
+              genderStats: { male: 0, female: 0 },
+              roleStats: {},
+              marketingSources: [],
+              degreeLevelStats: { student: 0, graduate: 0 },
+              classYearStats: {},
+              currentGenderStats: { male: 0, female: 0 }
+            }));
+          }
+        } catch (fallbackError) {
+          console.error('Fallback query also failed:', fallbackError);
+        }
       }
-
-      let query = supabase
-        .from('users_profiles')
-        .select('*');
-
-      if (dateFilter.created_at) {
-        query = query.gte('created_at', dateFilter.created_at.replace('gte.', ''));
-      }
-
-      const { data: users, error } = await query;
-
-      if (error) throw error;
-
-      const stats = processUserStatistics((users || []) as UserProfileItem[]);
-      setStatsData(prev => ({ ...prev, ...stats } as StatsData));
     };
 
     const fetchEventStats = async () => {
@@ -996,23 +1089,42 @@ export function AdminPanel() {
         classYearStats: {},
         currentGenderStats: { male: 0, female: 0 }
       };
-
+    
       const universityCount: Record<string, number> = {};
       const facultyCount: Record<string, number> = {};
       const roleCount: Record<string, number> = {};
       const marketingCount: Record<string, number> = {};
       const classYearCount: Record<string, number> = {};
-
+    
       users.forEach(user => {
-        if (user.degree_level === 'graduate') {
-          stats.graduates++;
-        } else if (user.degree_level === 'student') {
-          stats.students++;
+        // Debug logging for degree level
+        if (!user.degree_level) {
+          console.log('User missing degree_level:', { 
+            id: user.id, 
+            name: `${user.first_name} ${user.last_name}`,
+            degree_level: user.degree_level 
+          });
         }
-
+    
+        // Count graduates and students - handle different possible values
+        if (user.degree_level) {
+          const degreeLevel = user.degree_level.toString().toLowerCase();
+          if (degreeLevel === 'graduate') {
+            stats.graduates++;
+            stats.degreeLevelStats.graduate++;
+          } else if (degreeLevel === 'student') {
+            stats.students++;
+            stats.degreeLevelStats.student++;
+          } else {
+            console.log('Unknown degree level:', degreeLevel, 'for user:', user.id);
+          }
+        }
+    
+        // Count current in event and building
         if (user.event_entry) stats.currentInEvent++;
         if (user.building_entry) stats.currentInBuilding++;
-
+    
+        // Count gender statistics
         if (user.gender === 'male') {
           stats.genderStats.male++;
           if (user.event_entry) stats.currentGenderStats.male++;
@@ -1020,45 +1132,58 @@ export function AdminPanel() {
           stats.genderStats.female++;
           if (user.event_entry) stats.currentGenderStats.female++;
         }
-
+    
+        // Count universities
         if (user.university) {
           universityCount[user.university] = (universityCount[user.university] || 0) + 1;
         }
-
+    
+        // Count faculties
         if (user.faculty) {
           facultyCount[user.faculty] = (facultyCount[user.faculty] || 0) + 1;
         }
-
+    
+        // Count roles
         if (user.role) {
           roleCount[user.role] = (roleCount[user.role] || 0) + 1;
         }
-
+    
+        // Count marketing sources
         if (user.how_did_hear_about_event) {
           marketingCount[user.how_did_hear_about_event] = (marketingCount[user.how_did_hear_about_event] || 0) + 1;
         }
-
+    
+        // Count class years
         if (user.class) {
           classYearCount[user.class] = (classYearCount[user.class] || 0) + 1;
         }
       });
-
+    
+      // Convert counts to arrays and sort
       stats.universities = (Object.entries(universityCount) as Array<[string, number]>)
         .map(([name, count]) => ({ name, count }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 10);
-
+    
       stats.faculties = (Object.entries(facultyCount) as Array<[string, number]>)
         .map(([name, count]) => ({ name, count }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 10);
-
+    
       stats.roleStats = roleCount;
       stats.marketingSources = (Object.entries(marketingCount) as Array<[string, number]>)
         .map(([name, count]) => ({ name, count }))
         .sort((a, b) => b.count - a.count);
-
+    
       stats.classYearStats = classYearCount;
-
+    
+      console.log('Processed stats:', {
+        total: stats.totalRegistrations,
+        students: stats.students,
+        graduates: stats.graduates,
+        degreeLevelStats: stats.degreeLevelStats
+      });
+    
       return stats;
     };
 

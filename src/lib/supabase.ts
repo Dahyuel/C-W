@@ -498,34 +498,24 @@ export const signInUser = async (email: string, password: string) => {
   });
   return { data, error };
 };
-
 export const resetPassword = async (email: string) => {
-  const { data, error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-    redirectTo: `${window.location.origin}/reset-password`
-  });
-  return { data, error };
-};
-
-export const resetPasswordWithPersonalId = async (personalId: string, email: string) => {
   try {
-    // Verify personal ID exists
-    const { data: profileData, error: profileError } = await supabase
-      .from('users_profiles')
-      .select('id')
-      .eq('personal_id', personalId.trim())
-      .limit(1);
-
-    if (profileError || !profileData || profileData.length === 0) {
-      return { 
-        data: null, 
-        error: { message: 'Personal ID not found' }
-      };
+    const { data, error } = await supabase.auth.resetPasswordForEmail(
+      email.trim().toLowerCase(), 
+      {
+        redirectTo: `https://port.asucareercenter.com/reset-password#type=recovery`
+      }
+    );
+    
+    if (error) {
+      console.error('Password reset error:', error);
+      return { data: null, error };
     }
 
-    const { data, error } = await resetPassword(email);
-    return { data, error };
-
+    console.log('✅ Password reset email sent to:', email);
+    return { data, error: null };
   } catch (error: any) {
+    console.error('Password reset exception:', error);
     return { data: null, error: { message: error.message || 'Password reset failed' } };
   }
 };

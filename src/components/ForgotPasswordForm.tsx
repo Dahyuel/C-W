@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { KeyRound, ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { resetPasswordWithPersonalId } from '../lib/supabase'; // Adjust path as needed
+import { resetPassword } from '../lib/supabase'; // Use the direct resetPassword function
 
 interface ForgotPasswordData {
-  personalId: string;
   email: string;
 }
 
@@ -17,26 +16,11 @@ export const ForgotPasswordForm: React.FC = () => {
   const navigate = useNavigate();
   
   const [formData, setFormData] = useState<ForgotPasswordData>({
-    personalId: '',
     email: ''
   });
   const [errors, setErrors] = useState<ValidationError[]>([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-
-  const validatePersonalId = (personalId: string): string | null => {
-    const trimmed = personalId.trim();
-    
-    if (!trimmed) {
-      return 'Personal ID is required';
-    }
-    
-    if (!/^\d{14}$/.test(trimmed)) {
-      return 'Personal ID must be exactly 14 digits';
-    }
-    
-    return null;
-  };
 
   const validateEmail = (email: string): string | null => {
     const trimmed = email.trim();
@@ -62,9 +46,6 @@ export const ForgotPasswordForm: React.FC = () => {
   const validateForm = (): ValidationError[] => {
     const validationErrors: ValidationError[] = [];
 
-    const personalIdError = validatePersonalId(formData.personalId);
-    if (personalIdError) validationErrors.push({ field: 'personalId', message: personalIdError });
-
     const emailError = validateEmail(formData.email);
     if (emailError) validationErrors.push({ field: 'email', message: emailError });
 
@@ -84,7 +65,7 @@ export const ForgotPasswordForm: React.FC = () => {
     setErrors([]);
 
     try {
-      const { error } = await resetPasswordWithPersonalId(formData.personalId, formData.email);
+      const { error } = await resetPassword(formData.email);
 
       if (error) {
         setErrors([{ field: 'general', message: error.message }]);
@@ -111,7 +92,7 @@ export const ForgotPasswordForm: React.FC = () => {
         <div 
           className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0"
           style={{
-            backgroundImage: 'url("https://ypiwfedtvgmazqcwolac.supabase.co/storage/v1/object/public/Assets/careercenter.png")',
+            backgroundImage: 'url("/images/careercenter.png")',
           }}
         >
           {/* Overlay for better readability */}
@@ -144,7 +125,7 @@ export const ForgotPasswordForm: React.FC = () => {
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0"
         style={{
-          backgroundImage: 'url("https://ypiwfedtvgmazqcwolac.supabase.co/storage/v1/object/public/Assets/careercenter.png")',
+          backgroundImage: 'url("/images/careercenter.png")',
         }}
       >
         {/* Overlay for better readability */}
@@ -158,7 +139,7 @@ export const ForgotPasswordForm: React.FC = () => {
           <div className="bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-6 text-center">
             <KeyRound className="mx-auto h-12 w-12 text-white mb-3" />
             <h1 className="text-2xl font-bold text-white mb-2">Reset Password</h1>
-            <p className="text-orange-100">Enter your details to reset your password</p>
+            <p className="text-orange-100">Enter your email to reset your password</p>
           </div>
 
           {/* Form */}
@@ -172,26 +153,6 @@ export const ForgotPasswordForm: React.FC = () => {
             )}
 
             <div className="space-y-6">
-              {/* Personal ID */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Personal ID
-                </label>
-                <input
-                  type="text"
-                  value={formData.personalId}
-                  onChange={(e) => updateField('personalId', e.target.value)}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
-                    getFieldError('personalId') ? 'border-red-300' : 'border-gray-300'
-                  }`}
-                  placeholder="Enter your 14-digit Personal ID"
-                  maxLength={14}
-                />
-                {getFieldError('personalId') && (
-                  <p className="text-sm text-red-600 mt-2">{getFieldError('personalId')}</p>
-                )}
-              </div>
-
               {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
