@@ -1,6 +1,6 @@
-// components/RegistrationForm.tsx - OPTIMIZED with direct redirection
+// components/RegistrationForm.tsx - UPDATED with logout button
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { User, GraduationCap, ChevronRight, CheckCircle, AlertCircle, FileText, X } from 'lucide-react';
+import { User, GraduationCap, ChevronRight, CheckCircle, AlertCircle, FileText, X, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { RegistrationData, ValidationError, FileUpload as FileUploadType } from '../types';
 import { FACULTIES, CLASS_YEARS, HOW_DID_YOU_HEAR_OPTIONS } from '../utils/constants';
@@ -115,9 +115,40 @@ const FileUpload: React.FC<{
   );
 };
 
+const LogoutButton: React.FC = () => {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    
+    setIsLoggingOut(true);
+    try {
+      await signOut();
+      navigate('/login', { replace: true });
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleLogout}
+      disabled={isLoggingOut}
+      className="fixed bottom-6 right-6 z-50 flex items-center space-x-2 px-4 py-3 bg-red-600 text-white rounded-lg shadow-lg hover:bg-red-700 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed smooth-hover"
+    >
+      <LogOut className="w-4 h-4" />
+      <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>
+    </button>
+  );
+};
+
 export const RegistrationForm: React.FC = () => {
   const navigate = useNavigate();
-  const { user, profile, isAuthenticated, loading: authLoading, getRoleBasedRedirect, refreshProfile } = useAuth();
+  const { user, profile, isAuthenticated, loading: authLoading, getRoleBasedRedirect, refreshProfile, signOut } = useAuth();
   
   const [currentSection, setCurrentSection] = useState(1);
   const [formData, setFormData] = useState<RegistrationData>({
@@ -870,6 +901,9 @@ export const RegistrationForm: React.FC = () => {
         isLoading={showAuthTransition}
         message="Completing your profile..."
       />
+
+      {/* Logout Button */}
+      <LogoutButton />
 
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0"

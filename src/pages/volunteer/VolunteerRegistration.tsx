@@ -1,6 +1,6 @@
-// components/VolunteerRegistration.tsx - UPDATED
+// components/VolunteerRegistration.tsx - UPDATED with logout button
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { User, ChevronRight, CheckCircle, AlertCircle, Heart, Users, X } from 'lucide-react';
+import { User, ChevronRight, CheckCircle, AlertCircle, Heart, Users, X, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ValidationError } from '../../types';
 import { FACULTIES } from '../../utils/constants';
@@ -55,6 +55,38 @@ const ErrorPopup: React.FC<{
         </div>
       </div>
     </div>
+  );
+};
+
+// Logout Button Component
+const LogoutButton: React.FC = () => {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    
+    setIsLoggingOut(true);
+    try {
+      await signOut();
+      navigate('/login', { replace: true });
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleLogout}
+      disabled={isLoggingOut}
+      className="fixed bottom-6 right-6 z-50 flex items-center space-x-2 px-4 py-3 bg-red-600 text-white rounded-lg shadow-lg hover:bg-red-700 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed smooth-hover"
+    >
+      <LogOut className="w-4 h-4" />
+      <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>
+    </button>
   );
 };
 
@@ -668,6 +700,9 @@ export const VolunteerRegistration: React.FC = () => {
         isLoading={showAuthTransition}
         message="Completing your volunteer profile..."
       />
+
+      {/* ADD LOGOUT BUTTON */}
+      <LogoutButton />
 
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0"

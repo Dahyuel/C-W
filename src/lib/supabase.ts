@@ -1741,47 +1741,15 @@ export const checkFileExists = async (bucket: string, filePath: string) => {
 
 export const getUserRankingAndScore = async (userId: string) => {
   try {
-    const { data: userProfile, error: profileError } = await supabase
-      .from('users_profiles')
-      .select('score, role')
-      .eq('id', userId)
-      .single();
+    const { data, error } = await supabase
+      .rpc('get_user_ranking_and_score_v2', { user_uuid: userId });
 
-    if (profileError) {
-      console.error('Error fetching user profile:', profileError);
-      return { data: null, error: profileError };
+    if (error) {
+      console.error('Error fetching user ranking:', error);
+      return { data: null, error };
     }
 
-    // Get ranking based on role
-    let query = supabase
-      .from('users_profiles')
-      .select('id, score')
-      .order('score', { ascending: false });
-
-    if (userProfile.role === 'attendee') {
-      query = query.eq('role', 'attendee');
-    } else if (userProfile.role !== 'admin') {
-      query = query.not('role', 'in', '("attendee","admin")');
-    }
-
-    const { data: allUsers, error: rankError } = await query;
-
-    if (rankError) {
-      console.error('Error fetching ranking:', rankError);
-      return { data: null, error: rankError };
-    }
-
-    const userRank = allUsers?.findIndex(user => user.id === userId) + 1 || 0;
-    const totalUsers = allUsers?.length || 0;
-
-    return {
-      data: {
-        score: userProfile.score || 0,
-        rank: userRank,
-        total_users: totalUsers
-      },
-      error: null
-    };
+    return { data, error: null };
   } catch (error: any) {
     console.error('Get user ranking exception:', error);
     return { data: null, error: { message: error.message } };

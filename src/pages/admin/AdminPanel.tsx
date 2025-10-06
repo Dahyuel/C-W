@@ -38,8 +38,19 @@ interface CompanyItem {
   description?: string;
   website?: string;
   booth_number?: string;
+  partner_type?: string;
   created_at?: string;
 }
+
+// Add partner type order
+const PARTNER_TYPES = [
+  "Strategic Partner",
+  "Main Partners", 
+  "Regular Partners",
+  "Tech Partners",
+  "Educational Partners",
+  "Community Partners"
+];
 
 interface SessionItem {
   id: string;
@@ -178,7 +189,17 @@ export function AdminPanel() {
     { value: "custom", label: "Custom Selection" }
   ];
   
-  const [editCompany, setEditCompany] = useState<{ id: string; name: string; logo: File | null; logoUrl: string; logoType: 'link' | 'upload'; description: string; website: string; boothNumber: string;}>({
+  const [editCompany, setEditCompany] = useState<{ 
+    id: string; 
+    name: string; 
+    logo: File | null; 
+    logoUrl: string; 
+    logoType: 'link' | 'upload'; 
+    description: string; 
+    website: string; 
+    boothNumber: string;
+    partnerType: string;
+  }>({
     id: "",
     name: "",
     logo: null,
@@ -187,6 +208,7 @@ export function AdminPanel() {
     description: "",
     website: "",
     boothNumber: "",
+    partnerType: "",
   });
 
   const [editSession, setEditSession] = useState<{ id: string; title: string; date: string; speaker: string; capacity: string | number; type: 'session' | string; hour: string; location: string; description: string;}>({
@@ -212,8 +234,16 @@ export function AdminPanel() {
     location: "",
     type: "general",
   });
-  
-  const [newCompany, setNewCompany] = useState<{ name: string; logo: File | null; logoUrl: string; logoType: 'link' | 'upload'; description: string; website: string; boothNumber: string;}>({
+  const [newCompany, setNewCompany] = useState<{ 
+    name: string; 
+    logo: File | null; 
+    logoUrl: string; 
+    logoType: 'link' | 'upload'; 
+    description: string; 
+    website: string; 
+    boothNumber: string;
+    partnerType: string;
+  }>({
     name: "",
     logo: null,
     logoUrl: "",
@@ -221,6 +251,7 @@ export function AdminPanel() {
     description: "",
     website: "",
     boothNumber: "",
+    partnerType: "",
   });
 
   const [newSession, setNewSession] = useState<{ title: string; date: string; speaker: string; capacity: string | number; type: 'session' | string; hour: string; location: string; description: string;}>({
@@ -280,6 +311,28 @@ export function AdminPanel() {
   const showFeedback = (message: string, type: 'success' | 'error' = 'success') => {
     setFeedback({ type, message });
     setTimeout(() => setFeedback(null), 5000);
+  };
+
+  // Helper function to get date for a specific day
+  const getDateForDay = (day: number): string => {
+    const eventStartDate = new Date('2025-10-19');
+    const targetDate = new Date(eventStartDate);
+    targetDate.setDate(eventStartDate.getDate() + (day - 1));
+    return targetDate.toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+  };
+
+  // Helper function to get day from date (Day 1 = Oct 19, 2025)
+  const getDayFromDate = (dateString: string): number => {
+    const date = new Date(dateString);
+    const eventStartDate = new Date('2025-10-19');
+    const diffTime = date.getTime() - eventStartDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return Math.max(1, Math.min(5, diffDays + 1));
   };
 
   useEffect(() => {
@@ -551,6 +604,7 @@ export function AdminPanel() {
       description: company.description || "",
       website: company.website || "",
       boothNumber: company.booth_number || "",
+      partnerType: company.partner_type || "",
     });
     setEditCompanyModal(true);
   };
@@ -771,13 +825,13 @@ export function AdminPanel() {
 
         logoUrl = urlData.publicUrl;
       }
-
       const { error } = await supabase.from("companies").update({
         name: editCompany.name,
         logo_url: logoUrl,
         description: editCompany.description,
         website: editCompany.website,
         booth_number: editCompany.boothNumber,
+        partner_type: editCompany.partnerType,
       }).eq('id', editCompany.id);
 
       if (error) {
@@ -793,6 +847,7 @@ export function AdminPanel() {
           description: "",
           website: "",
           boothNumber: "",
+          partnerType: "",
         });
         showFeedback("Company updated successfully!", "success");
         await fetchCompanies();
@@ -919,6 +974,43 @@ export function AdminPanel() {
         setLoading(false);
       }
     };
+
+    const fetchEventStats = async () => {
+      try {
+        // Calculate the date for the selected day (Day 1 = Oct 19, 2025)
+        const eventStartDate = new Date('2025-10-19');
+        const targetDate = new Date(eventStartDate);
+        targetDate.setDate(eventStartDate.getDate() + (selectedDay - 1));
+        
+        const startOfDay = new Date(targetDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        
+        const endOfDay = new Date(targetDate);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        const { data: attendances, error } = await supabase
+          .from('attendances')
+          .select('*')
+          .gte('scanned_at', startOfDay.toISOString())
+          .lte('scanned_at', endOfDay.toISOString());
+
+        if (error) throw error;
+
+        const dayStats = processEventStatistics(attendances || []);
+        
+        setStatsData(prev => ({
+          ...prev,
+          eventStats: {
+            ...prev.eventStats,
+            [`day${selectedDay}`]: dayStats
+          }
+        }));
+      } catch (error) {
+        console.error('Error fetching event stats:', error);
+        throw error;
+      }
+    };
+
     const fetchRegistrationStats = async () => {
       try {
         let query = supabase
@@ -930,11 +1022,8 @@ export function AdminPanel() {
           const today = new Date();
           today.setHours(0, 0, 0, 0);
           
-          // Format dates to match PostgreSQL timestamp format
           const todayStart = today.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '+00');
           const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '+00');
-          
-          console.log('Today filter:', { todayStart, todayEnd });
           
           query = query.gte('created_at', todayStart)
                       .lt('created_at', todayEnd);
@@ -943,10 +1032,7 @@ export function AdminPanel() {
           weekAgo.setDate(weekAgo.getDate() - 7);
           weekAgo.setHours(0, 0, 0, 0);
           
-          // Format date to match PostgreSQL timestamp format
           const weekAgoStart = weekAgo.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '+00');
-          
-          console.log('Week filter:', { weekAgoStart });
           
           query = query.gte('created_at', weekAgoStart);
         }
@@ -958,12 +1044,9 @@ export function AdminPanel() {
           throw error;
         }
     
-        // For "All Time", we need to ensure we get all users
-        // If we have a count but limited data, we need to fetch all pages
         let allUsers = users || [];
         
         if (timeRange === 'all' && count && count > 1000) {
-          // Fetch all users with pagination
           const pageSize = 1000;
           const totalPages = Math.ceil(count / pageSize);
           allUsers = [];
@@ -979,19 +1062,10 @@ export function AdminPanel() {
           }
         }
     
-        console.log(`Fetched ${allUsers.length} users for time range: ${timeRange}`);
-        
-        // Debug: Check dates of fetched users
-        if (allUsers.length > 0) {
-          const sampleDates = allUsers.slice(0, 3).map(u => u.created_at);
-          console.log('Sample created_at dates:', sampleDates);
-        }
-    
         const stats = processUserStatistics(allUsers as UserProfileItem[]);
         setStatsData(prev => ({ ...prev, ...stats } as StatsData));
       } catch (error) {
         console.error('Error fetching registration stats:', error);
-        // Fallback: try to get just the count if the detailed query fails
         try {
           let countQuery = supabase
             .from('users_profiles')
@@ -1017,7 +1091,6 @@ export function AdminPanel() {
           const { count, error: countError } = await countQuery;
           
           if (!countError && count !== null) {
-            console.log(`Fallback count for ${timeRange}:`, count);
             setStatsData(prev => ({
               ...prev,
               totalRegistrations: count,
@@ -1038,38 +1111,6 @@ export function AdminPanel() {
         } catch (fallbackError) {
           console.error('Fallback query also failed:', fallbackError);
         }
-      }
-    };
-
-    const fetchEventStats = async () => {
-      try {
-        const today = new Date();
-        const startOfDay = new Date(today);
-        startOfDay.setHours(0, 0, 0, 0);
-        
-        const endOfDay = new Date(today);
-        endOfDay.setHours(23, 59, 59, 999);
-
-        const { data: attendances, error } = await supabase
-          .from('attendances')
-          .select('*')
-          .gte('scanned_at', startOfDay.toISOString())
-          .lte('scanned_at', endOfDay.toISOString());
-
-        if (error) throw error;
-
-        const dayStats = processEventStatistics(attendances || []);
-        
-        setStatsData(prev => ({
-          ...prev,
-          eventStats: {
-            ...prev.eventStats,
-            [`day${selectedDay}`]: dayStats
-          }
-        }));
-      } catch (error) {
-        console.error('Error fetching event stats:', error);
-        throw error;
       }
     };
 
@@ -1097,16 +1138,6 @@ export function AdminPanel() {
       const classYearCount: Record<string, number> = {};
     
       users.forEach(user => {
-        // Debug logging for degree level
-        if (!user.degree_level) {
-          console.log('User missing degree_level:', { 
-            id: user.id, 
-            name: `${user.first_name} ${user.last_name}`,
-            degree_level: user.degree_level 
-          });
-        }
-    
-        // Count graduates and students - handle different possible values
         if (user.degree_level) {
           const degreeLevel = user.degree_level.toString().toLowerCase();
           if (degreeLevel === 'graduate') {
@@ -1115,16 +1146,12 @@ export function AdminPanel() {
           } else if (degreeLevel === 'student') {
             stats.students++;
             stats.degreeLevelStats.student++;
-          } else {
-            console.log('Unknown degree level:', degreeLevel, 'for user:', user.id);
           }
         }
     
-        // Count current in event and building
         if (user.event_entry) stats.currentInEvent++;
         if (user.building_entry) stats.currentInBuilding++;
     
-        // Count gender statistics
         if (user.gender === 'male') {
           stats.genderStats.male++;
           if (user.event_entry) stats.currentGenderStats.male++;
@@ -1133,33 +1160,27 @@ export function AdminPanel() {
           if (user.event_entry) stats.currentGenderStats.female++;
         }
     
-        // Count universities
         if (user.university) {
           universityCount[user.university] = (universityCount[user.university] || 0) + 1;
         }
     
-        // Count faculties
         if (user.faculty) {
           facultyCount[user.faculty] = (facultyCount[user.faculty] || 0) + 1;
         }
     
-        // Count roles
         if (user.role) {
           roleCount[user.role] = (roleCount[user.role] || 0) + 1;
         }
     
-        // Count marketing sources
         if (user.how_did_hear_about_event) {
           marketingCount[user.how_did_hear_about_event] = (marketingCount[user.how_did_hear_about_event] || 0) + 1;
         }
     
-        // Count class years
         if (user.class) {
           classYearCount[user.class] = (classYearCount[user.class] || 0) + 1;
         }
       });
     
-      // Convert counts to arrays and sort
       stats.universities = (Object.entries(universityCount) as Array<[string, number]>)
         .map(([name, count]) => ({ name, count }))
         .sort((a, b) => b.count - a.count)
@@ -1176,13 +1197,6 @@ export function AdminPanel() {
         .sort((a, b) => b.count - a.count);
     
       stats.classYearStats = classYearCount;
-    
-      console.log('Processed stats:', {
-        total: stats.totalRegistrations,
-        students: stats.students,
-        graduates: stats.graduates,
-        degreeLevelStats: stats.degreeLevelStats
-      });
     
       return stats;
     };
@@ -1452,31 +1466,36 @@ export function AdminPanel() {
     return (
       <div className="space-y-8 fade-in-blur">
         {/* Day Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 stagger-children">
-          <StatCard
-            title={`Day ${selectedDay} Entries`}
-            value={dayStats.entries}
-            icon={<TrendingUp className="h-6 w-6" />}
-            color="green"
-          />
-          <StatCard
-            title={`Day ${selectedDay} Exits`}
-            value={dayStats.exits}
-            icon={<TrendingUp className="h-6 w-6" />}
-            color="red"
-          />
-          <StatCard
-            title="Building Entries"
-            value={dayStats.building_entries}
-            icon={<Building className="h-6 w-6" />}
-            color="blue"
-          />
-          <StatCard
-            title="Session Entries"
-            value={dayStats.session_entries}
-            icon={<Calendar className="h-6 w-6" />}
-            color="purple"
-          />
+        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Day {selectedDay} - {getDateForDay(selectedDay)}
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 stagger-children">
+            <StatCard
+              title="Entries"
+              value={dayStats.entries}
+              icon={<TrendingUp className="h-6 w-6" />}
+              color="green"
+            />
+            <StatCard
+              title="Exits"
+              value={dayStats.exits}
+              icon={<TrendingUp className="h-6 w-6" />}
+              color="red"
+            />
+            <StatCard
+              title="Building Entries"
+              value={dayStats.building_entries}
+              icon={<Building className="h-6 w-6" />}
+              color="blue"
+            />
+            <StatCard
+              title="Session Entries"
+              value={dayStats.session_entries}
+              icon={<Calendar className="h-6 w-6" />}
+              color="purple"
+            />
+          </div>
         </div>
 
         {/* Inside Event Analytics Section */}
@@ -1571,32 +1590,32 @@ export function AdminPanel() {
             <tbody>
               <tr className="border-t">
                 <td className="px-4 py-3">Building</td>
-<td className="px-4 py-3 text-red-600">350</td>
+                <td className="px-4 py-3 text-red-600">350</td>
                 <td className="px-4 py-3">{statsData.currentInBuilding}</td>
                 <td className="px-4 py-3">
-<span className={`px-2 py-1 rounded-full text-sm font-medium ${
-  statsData.currentInBuilding < 280 
-    ? 'bg-green-100 text-green-800' 
-    : statsData.currentInBuilding < 315 
-    ? 'bg-yellow-100 text-yellow-800' 
-    : 'bg-red-100 text-red-800'
-}`}>
+                  <span className={`px-2 py-1 rounded-full text-sm font-medium ${
+                    statsData.currentInBuilding < 280 
+                      ? 'bg-green-100 text-green-800' 
+                      : statsData.currentInBuilding < 315 
+                      ? 'bg-yellow-100 text-yellow-800' 
+                      : 'bg-red-100 text-red-800'
+                  }`}>
                     {statsData.currentInBuilding > 0 ? Math.round((statsData.currentInBuilding / 350) * 100) : 0}%
                   </span>
                 </td>
               </tr>
               <tr className="border-t">
                 <td className="px-4 py-3">Event</td>
-<td className="px-4 py-3 text-red-600">1500</td>
+                <td className="px-4 py-3 text-red-600">1500</td>
                 <td className="px-4 py-3">{statsData.currentInEvent}</td>
                 <td className="px-4 py-3">
-<span className={`px-2 py-1 rounded-full text-sm font-medium ${
-  statsData.currentInEvent < 1200 
-    ? 'bg-green-100 text-green-800' 
-    : statsData.currentInEvent < 1350 
-    ? 'bg-yellow-100 text-yellow-800' 
-    : 'bg-red-100 text-red-800'
-}`}>
+                  <span className={`px-2 py-1 rounded-full text-sm font-medium ${
+                    statsData.currentInEvent < 1200 
+                      ? 'bg-green-100 text-green-800' 
+                      : statsData.currentInEvent < 1350 
+                      ? 'bg-yellow-100 text-yellow-800' 
+                      : 'bg-red-100 text-red-800'
+                  }`}>
                     {statsData.currentInEvent > 0 ? Math.round((statsData.currentInEvent / 1500) * 100) : 0}%
                   </span>
                 </td>
@@ -1616,13 +1635,17 @@ export function AdminPanel() {
       fetchDailyActivity(selectedDay);
     }, [selectedDay]);
 
-    const fetchDailyActivity = async (_day: number) => {
+    const fetchDailyActivity = async (day: number) => {
       try {
-        const today = new Date();
-        const startOfDay = new Date(today);
+        // Calculate the date for the selected day (Day 1 = Oct 19, 2025)
+        const eventStartDate = new Date('2025-10-19');
+        const targetDate = new Date(eventStartDate);
+        targetDate.setDate(eventStartDate.getDate() + (day - 1));
+        
+        const startOfDay = new Date(targetDate);
         startOfDay.setHours(0, 0, 0, 0);
         
-        const endOfDay = new Date(today);
+        const endOfDay = new Date(targetDate);
         endOfDay.setHours(23, 59, 59, 999);
 
         const { data: attendances, error } = await supabase
@@ -1732,9 +1755,22 @@ export function AdminPanel() {
 
     const fetchSessionPopularity = async (day: number) => {
       try {
+        // Calculate the date for the selected day (Day 1 = Oct 19, 2025)
+        const eventStartDate = new Date('2025-10-19');
+        const targetDate = new Date(eventStartDate);
+        targetDate.setDate(eventStartDate.getDate() + (day - 1));
+        
+        const startOfDay = new Date(targetDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        
+        const endOfDay = new Date(targetDate);
+        endOfDay.setHours(23, 59, 59, 999);
+
         const { data: sessions, error } = await supabase
           .from('sessions')
-          .select('id, title, max_attendees, current_bookings')
+          .select('id, title, max_attendees, current_bookings, start_time')
+          .gte('start_time', startOfDay.toISOString())
+          .lte('start_time', endOfDay.toISOString())
           .order('current_bookings', { ascending: false });
 
         if (error) throw error;
@@ -1822,29 +1858,30 @@ export function AdminPanel() {
 
   const fetchEventsByDay = async (day: number) => {
     try {
+      // Calculate the date for the selected day (Day 1 = Oct 19, 2025)
+      const eventStartDate = new Date('2025-10-19');
+      const targetDate = new Date(eventStartDate);
+      targetDate.setDate(eventStartDate.getDate() + (day - 1));
+      
+      const startOfDay = new Date(targetDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date(targetDate);
+      endOfDay.setHours(23, 59, 59, 999);
+
       const { data, error } = await supabase
         .from("schedule_items")
         .select("*")
+        .gte('start_time', startOfDay.toISOString())
+        .lte('start_time', endOfDay.toISOString())
         .order("start_time", { ascending: true });
 
       if (!error && data) {
-        const filteredData = data.filter((item) => {
-          const itemDay = getDayFromDate(item.start_time);
-          return itemDay === day;
-        });
-        setEvents(filteredData);
+        setEvents(data);
       }
     } catch (error) {
       console.error("Error fetching events:", error);
     }
-  };
-
-  const getDayFromDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const diffTime = date.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return Math.max(1, Math.min(5, diffDays + 1));
   };
 
   const fetchCompanies = async () => {
@@ -1852,6 +1889,7 @@ export function AdminPanel() {
       const { data, error } = await supabase
         .from("companies")
         .select("*")
+        .order("partner_type", { ascending: true })
         .order("name", { ascending: true });
 
       if (!error && data) {
@@ -1912,6 +1950,7 @@ export function AdminPanel() {
         description: newCompany.description,
         website: newCompany.website,
         booth_number: newCompany.boothNumber,
+        partner_type: newCompany.partnerType,
       });
 
       if (error) {
@@ -1926,6 +1965,7 @@ export function AdminPanel() {
           description: "",
           website: "",
           boothNumber: "",
+          partnerType: "",
         });
         showFeedback("Company added successfully!", "success");
         await fetchCompanies();
@@ -2355,7 +2395,7 @@ export function AdminPanel() {
     { key: "sessions", label: "Sessions" },
     { key: "events", label: "Events" },
     { key: "maps", label: "Maps" },
-    { key: "employers", label: "Employers" },
+    { key: "companies", label: "Companies" }
   ];
 
   if (loadingData) {
@@ -2584,19 +2624,20 @@ export function AdminPanel() {
               <h2 className="text-xl font-bold text-gray-900 flex items-center mb-4 fade-in-blur">
                 <Calendar className="h-5 w-5 mr-2 text-orange-600" /> Events Management
               </h2>
-              
-              <div className="flex space-x-2 mb-4 fade-in-blur">
+
+              <div className="flex space-x-1 mb-4 fade-in-blur">
                 {[1, 2, 3, 4, 5].map((day) => (
                   <button
                     key={day}
                     onClick={() => setActiveDay(day)}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover min-w-20 ${
                       activeDay === day 
                         ? "bg-orange-500 text-white" 
                         : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                     }`}
                   >
-                    Day {day}
+                    Day {day}<br />
+                    <span className="text-xs">{getDateForDay(day).split(',')[0]}</span>
                   </button>
                 ))}
               </div>
@@ -2703,12 +2744,12 @@ export function AdminPanel() {
           </div>
         )}
 
-        {/* Employers Tab */}
-        {activeTab === "employers" && (
+        {/* Companies Tab */}
+        {activeTab === "companies" && (
           <div className="fade-in-blur">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-900 flex items-center mb-4 sm:mb-0 fade-in-blur">
-                <Building className="h-5 w-5 mr-2 text-orange-600" /> Employers Management
+                <Building className="h-5 w-5 mr-2 text-orange-600" /> Companies Management
               </h2>
               <button
                 onClick={() => setCompanyModal(true)}
@@ -2719,163 +2760,246 @@ export function AdminPanel() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 stagger-children">
-              {companies.map((company) => (
-                <div 
-                  key={company.id} 
-                  className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 hover:shadow-md transition-all duration-300 smooth-hover card-hover fade-in-blur"
-                >
-                  <div className="text-center">
-                    <img 
-                      src={company.logo_url} 
-                      alt={`${company.name} logo`} 
-                      className="h-16 w-auto mx-auto mb-4 object-contain"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/64x64/orange/white?text=Logo";
-                      }}
-                    />
-                    <h3 className="text-lg font-bold text-gray-900 mb-2">{company.name}</h3>
-                    <p className="text-sm text-gray-600 mb-3 line-clamp-3">{company.description}</p>
-                    
-                    {company.booth_number && (
-                      <div className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 mb-4">
-                        Booth {company.booth_number}
-                      </div>
-                    )}
-                    
-                    <div className="flex gap-2 mt-4">
-                      <button
-                        onClick={() => handleCompanyClick(company)}
-                        className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover text-sm font-medium"
-                      >
-                        <Eye className="h-3 w-3 mr-1 inline" />
-                        View
-                      </button>
-                      <button
-                        onClick={() => handleEditCompany(company)}
-                        className="flex-1 bg-orange-500 text-white py-2 px-3 rounded-lg hover:bg-orange-600 transition-all duration-300 smooth-hover text-sm font-medium"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => openDeleteCompanyModal(company)}
-                        className="flex-1 bg-red-500 text-white py-2 px-3 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover text-sm font-medium"
-                      >
-                        <Trash2 className="h-3 w-3 mr-1 inline" />
-                        Delete
-                      </button>
+            <div className="space-y-8">
+              {PARTNER_TYPES.map((partnerType) => {
+                const partnerCompanies = companies.filter(company => 
+                  company.partner_type === partnerType
+                );
+                
+                if (partnerCompanies.length === 0) return null;
+                
+                return (
+                  <div key={partnerType} className="fade-in-blur">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+                      {partnerType}
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 stagger-children">
+                      {partnerCompanies.map((company) => (
+                        <div 
+                          key={company.id} 
+                          className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 hover:shadow-md transition-all duration-300 smooth-hover card-hover fade-in-blur"
+                        >
+                          <div className="text-center">
+                            <img 
+                              src={company.logo_url} 
+                              alt={`${company.name} logo`} 
+                              className="h-16 w-auto mx-auto mb-4 object-contain"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/64x64/orange/white?text=Logo";
+                              }}
+                            />
+                            <h3 className="text-lg font-bold text-gray-900 mb-2">{company.name}</h3>
+                            <p className="text-sm text-gray-600 mb-3 line-clamp-3">{company.description}</p>
+                            
+                            {/* Partner Type Badge */}
+                            {company.partner_type && (
+                              <div className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 mb-2">
+                                {company.partner_type}
+                              </div>
+                            )}
+                            
+                            {company.booth_number && (
+                              <div className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 mb-4">
+                                Booth {company.booth_number}
+                              </div>
+                            )}
+                            
+                            <div className="flex gap-2 mt-4">
+                              <button
+                                onClick={() => handleCompanyClick(company)}
+                                className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover text-sm font-medium"
+                              >
+                                <Eye className="h-3 w-3 mr-1 inline" />
+                                View
+                              </button>
+                              <button
+                                onClick={() => handleEditCompany(company)}
+                                className="flex-1 bg-orange-500 text-white py-2 px-3 rounded-lg hover:bg-orange-600 transition-all duration-300 smooth-hover text-sm font-medium"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => openDeleteCompanyModal(company)}
+                                className="flex-1 bg-red-500 text-white py-2 px-3 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover text-sm font-medium"
+                              >
+                                <Trash2 className="h-3 w-3 mr-1 inline" />
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
+                );
+              })}
+              
+              {/* Fallback if no companies found */}
+              {companies.length === 0 && (
+                <div className="text-center py-8 sm:py-12 bg-white rounded-lg border border-gray-200">
+                  <Building className="h-8 w-8 sm:h-12 sm:w-12 text-gray-300 mx-auto mb-3 sm:mb-4" />
+                  <p className="text-gray-500 text-sm sm:text-base">No companies available</p>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         )}
 
+
         {/* All Modals with createPortal and animations */}
 
-        {/* Company Modal */}
-        {companyModal && createPortal(
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
-            <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
-              <h3 className="text-2xl font-bold mb-4 fade-in-blur">Add New Company</h3>
-              <div className="space-y-4 stagger-children">
-                <input
-                  type="text"
-                  value={newCompany.name}
-                  onChange={(e) => setNewCompany({ ...newCompany, name: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
-                  placeholder="Company Name *"
-                />
-                
-                <div className="fade-in-blur">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Logo *</label>
-                  <div className="flex space-x-4 mb-3">
-                    <button
-                      type="button"
-                      onClick={() => setNewCompany({ ...newCompany, logoType: "link" })}
-                      className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
-                        newCompany.logoType === "link" 
-                          ? "bg-blue-500 text-white" 
-                          : "bg-gray-100 text-gray-700"
-                      }`}
-                    >
-                      <Link className="h-4 w-4 mr-2" />
-                      URL
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNewCompany({ ...newCompany, logoType: "upload" })}
-                      className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
-                        newCompany.logoType === "upload" 
-                          ? "bg-blue-500 text-white" 
-                          : "bg-gray-100 text-gray-700"
-                      }`}
-                    >
-                      <Upload className="h-4 w-4 mr-2" />
-                      Upload
-                    </button>
-                  </div>
-                  
-                  {newCompany.logoType === "link" ? (
-                    <input
-                      type="url"
-                      value={newCompany.logoUrl}
-                      onChange={(e) => setNewCompany({ ...newCompany, logoUrl: e.target.value })}
-                      className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
-                      placeholder="Logo URL *"
-                    />
-                  ) : (
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => setNewCompany({ ...newCompany, logo: e.target.files?.[0] || null })}
-                      className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
-                    />
-                  )}
-                </div>
-                
-                <textarea
-                  value={newCompany.description}
-                  onChange={(e) => setNewCompany({ ...newCompany, description: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
-                  placeholder="Description"
-                  rows={3}
-                />
-                <input
-                  type="url"
-                  value={newCompany.website}
-                  onChange={(e) => setNewCompany({ ...newCompany, website: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
-                  placeholder="Website *"
-                />
-                <input
-                  type="text"
-                  value={newCompany.boothNumber}
-                  onChange={(e) => setNewCompany({ ...newCompany, boothNumber: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
-                  placeholder="Booth Number *"
-                />
+{/* Company Detail Modal */}
+{companyDetailModal && selectedCompanyDetail && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
+      <div className="p-6 stagger-children">
+        <div className="flex items-center justify-between mb-6 fade-in-blur">
+          <h2 className="text-xl font-bold text-gray-900">Company Details</h2>
+          <button
+            onClick={() => {
+              setCompanyDetailModal(false);
+              setSelectedCompanyDetail(null);
+            }}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X className="h-6 w-6" />
+          </button>
+        </div>
+
+        <div className="space-y-6 fade-in-blur">
+          {/* Company Logo and Name */}
+          <div className="text-center">
+            <img 
+              src={selectedCompanyDetail.logo_url} 
+              alt={`${selectedCompanyDetail.name} logo`} 
+              className="h-24 w-auto mx-auto mb-4 object-contain"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/96x96/orange/white?text=Logo";
+              }}
+            />
+            <h3 className="text-2xl font-bold text-gray-900">{selectedCompanyDetail.name}</h3>
+            
+            {/* Partner Type Badge */}
+            {selectedCompanyDetail.partner_type && (
+              <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800 mt-2">
+                {selectedCompanyDetail.partner_type}
               </div>
-              <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
-                <button
-                  onClick={() => setCompanyModal(false)}
-                  className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleCompanySubmit}
-                  disabled={loading}
-                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-all duration-300 smooth-hover"
-                >
-                  {loading ? 'Adding...' : 'Save Company'}
-                </button>
+            )}
+            
+            {selectedCompanyDetail.booth_number && (
+              <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-100 text-orange-800 mt-2 ml-2">
+                <MapPin className="h-4 w-4 mr-1" />
+                Booth {selectedCompanyDetail.booth_number}
               </div>
+            )}
+          </div>
+
+          {selectedCompanyDetail.partner_type && (
+  <div className="fade-in-blur">
+    <label className="block text-sm font-medium text-gray-700 mb-2">Partner Type</label>
+    <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
+      {selectedCompanyDetail.partner_type}
+    </div>
+  </div>
+)}
+
+          {/* Company Description */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">About Company</label>
+            <p className="text-gray-700 leading-relaxed">
+              {selectedCompanyDetail.description || "No description available."}
+            </p>
+          </div>
+
+          {/* Website */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Website</label>
+            {selectedCompanyDetail.website ? (
+              <a 
+                href={selectedCompanyDetail.website} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-orange-600 hover:text-orange-700 break-all transition-colors"
+              >
+                {selectedCompanyDetail.website}
+              </a>
+            ) : (
+              <p className="text-gray-500">No website provided</p>
+            )}
+          </div>
+
+          {/* Additional Information */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Created Date */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Added On</label>
+              <p className="text-gray-900 text-sm">
+                {selectedCompanyDetail.created_at 
+                  ? new Date(selectedCompanyDetail.created_at).toLocaleDateString()
+                  : 'Unknown'
+                }
+              </p>
             </div>
-          </div>,
-          document.body
-        )}
+
+            {/* Company ID */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Company ID</label>
+              <p className="text-gray-900 text-sm font-mono truncate">
+                {selectedCompanyDetail.id}
+              </p>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="pt-4 space-y-3 fade-in-blur">
+            {selectedCompanyDetail.website && (
+              <button
+                onClick={() => window.open(selectedCompanyDetail.website, "_blank")}
+                className="w-full bg-orange-500 text-white py-3 px-4 rounded-lg hover:bg-orange-600 transition-all duration-300 smooth-hover font-medium flex items-center justify-center"
+              >
+                <Link className="h-4 w-4 mr-2" />
+                Visit Career Page
+              </button>
+            )}
+            
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => {
+                  handleEditCompany(selectedCompanyDetail);
+                  setCompanyDetailModal(false);
+                }}
+                className="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-all duration-300 smooth-hover font-medium"
+              >
+                Edit Company
+              </button>
+              
+              <button
+                onClick={() => {
+                  setCompanyDetailModal(false);
+                  openDeleteCompanyModal(selectedCompanyDetail);
+                }}
+                className="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover font-medium"
+              >
+                Delete Company
+              </button>
+            </div>
+            
+            <button
+              onClick={() => {
+                setCompanyDetailModal(false);
+                setSelectedCompanyDetail(null);
+              }}
+              className="w-full bg-gray-100 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover font-medium"
+            >
+              Close Details
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
 
         {/* Session Modal */}
         {sessionModal && createPortal(
@@ -3668,127 +3792,361 @@ export function AdminPanel() {
           document.body
         )}
 
-        {/* Edit Company Modal */}
-        {editCompanyModal && createPortal(
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
-            <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
-              <h3 className="text-2xl font-bold mb-4 fade-in-blur">Edit Company</h3>
-              <div className="space-y-4 stagger-children">
-                <input
-                  type="text"
-                  value={editCompany.name}
-                  onChange={(e) => setEditCompany({ ...editCompany, name: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
-                  placeholder="Company Name *"
-                />
-                
-                <div className="fade-in-blur">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Logo *</label>
-                  <div className="flex space-x-4 mb-3">
-                    <button
-                      type="button"
-                      onClick={() => setEditCompany({ ...editCompany, logoType: "link" })}
-                      className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
-                        editCompany.logoType === "link" 
-                          ? "bg-blue-500 text-white" 
-                          : "bg-gray-100 text-gray-700"
-                      }`}
-                    >
-                      <Link className="h-4 w-4 mr-2" />
-                      URL
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditCompany({ ...editCompany, logoType: "upload" })}
-                      className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
-                        editCompany.logoType === "upload" 
-                          ? "bg-blue-500 text-white" 
-                          : "bg-gray-100 text-gray-700"
-                      }`}
-                    >
-                      <Upload className="h-4 w-4 mr-2" />
-                      Upload New
-                    </button>
-                  </div>
-                  
-                  {editCompany.logoType === "link" ? (
-                    <input
-                      type="url"
-                      value={editCompany.logoUrl}
-                      onChange={(e) => setEditCompany({ ...editCompany, logoUrl: e.target.value })}
-                      className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
-                      placeholder="Logo URL *"
-                    />
-                  ) : (
-                    <div>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => setEditCompany({ ...editCompany, logo: e.target.files?.[0] || null })}
-                        className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Leave empty to keep current logo
-                      </p>
-                    </div>
-                  )}
-                  
-                  {editCompany.logoUrl && (
-                    <div className="mt-3 p-3 bg-gray-50 rounded-lg fade-in-blur">
-                      <p className="text-sm text-gray-600 mb-2">Current Logo:</p>
-                      <img 
-                        src={editCompany.logoUrl} 
-                        alt="Current logo" 
-                        className="h-16 w-auto object-contain"
-                        onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/64x64/orange/white?text=Logo";
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-                
-                <textarea
-                  value={editCompany.description}
-                  onChange={(e) => setEditCompany({ ...editCompany, description: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
-                  placeholder="Description"
-                  rows={3}
-                />
-                <input
-                  type="url"
-                  value={editCompany.website}
-                  onChange={(e) => setEditCompany({ ...editCompany, website: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
-                  placeholder="Website *"
-                />
-                <input
-                  type="text"
-                  value={editCompany.boothNumber}
-                  onChange={(e) => setEditCompany({ ...editCompany, boothNumber: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
-                  placeholder="Booth Number *"
-                />
-              </div>
-              <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
-                <button
-                  onClick={() => setEditCompanyModal(false)}
-                  className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleCompanyUpdate}
-                  disabled={loading}
-                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-all duration-300 smooth-hover"
-                >
-                  {loading ? 'Updating...' : 'Update Company'}
-                </button>
-              </div>
+       {/* Edit Company Modal */}
+{editCompanyModal && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
+    <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
+      <div className="flex items-center justify-between mb-6 fade-in-blur">
+        <h3 className="text-2xl font-bold text-gray-900">Edit Company</h3>
+        <button
+          onClick={() => setEditCompanyModal(false)}
+          className="text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          <X className="h-6 w-6" />
+        </button>
+      </div>
+      
+      <div className="space-y-4 stagger-children">
+        {/* Company Name */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Company Name *
+          </label>
+          <input
+            type="text"
+            value={editCompany.name}
+            onChange={(e) => setEditCompany({ ...editCompany, name: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter company name"
+          />
+        </div>
+
+        {/* Partner Type */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Partner Type *
+          </label>
+          <select
+            value={editCompany.partnerType}
+            onChange={(e) => setEditCompany({ ...editCompany, partnerType: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+          >
+            <option value="">Select Partner Type</option>
+            {PARTNER_TYPES.map(type => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Logo Section */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Company Logo
+          </label>
+          <div className="flex space-x-4 mb-3">
+            <button
+              type="button"
+              onClick={() => setEditCompany({ ...editCompany, logoType: "link" })}
+              className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
+                editCompany.logoType === "link" 
+                  ? "bg-blue-500 text-white" 
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              <Link className="h-4 w-4 mr-2" />
+              URL
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditCompany({ ...editCompany, logoType: "upload" })}
+              className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
+                editCompany.logoType === "upload" 
+                  ? "bg-blue-500 text-white" 
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Upload New
+            </button>
+          </div>
+          
+          {editCompany.logoType === "link" ? (
+            <input
+              type="url"
+              value={editCompany.logoUrl}
+              onChange={(e) => setEditCompany({ ...editCompany, logoUrl: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+              placeholder="https://example.com/logo.png"
+            />
+          ) : (
+            <div>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setEditCompany({ ...editCompany, logo: e.target.files?.[0] || null })}
+                className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Leave empty to keep current logo
+              </p>
             </div>
-          </div>,
-          document.body
-        )}
+          )}
+          
+          {editCompany.logoUrl && (
+            <div className="mt-3 p-3 bg-gray-50 rounded-lg fade-in-blur">
+              <p className="text-sm text-gray-600 mb-2">Current Logo:</p>
+              <img 
+                src={editCompany.logoUrl} 
+                alt="Current logo" 
+                className="h-16 w-auto object-contain"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/64x64/orange/white?text=Logo";
+                }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Description */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Description
+          </label>
+          <textarea
+            value={editCompany.description}
+            onChange={(e) => setEditCompany({ ...editCompany, description: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Brief description about the company..."
+            rows={3}
+          />
+        </div>
+
+        {/* Website */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Website *
+          </label>
+          <input
+            type="url"
+            value={editCompany.website}
+            onChange={(e) => setEditCompany({ ...editCompany, website: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="https://company-website.com"
+          />
+        </div>
+
+        {/* Booth Number */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Booth Number *
+          </label>
+          <input
+            type="text"
+            value={editCompany.boothNumber}
+            onChange={(e) => setEditCompany({ ...editCompany, boothNumber: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="e.g., A-12, B-05"
+          />
+        </div>
+      </div>
+
+      <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
+        <button
+          onClick={() => setEditCompanyModal(false)}
+          className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover font-medium"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleCompanyUpdate}
+          disabled={loading}
+          className="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-all duration-300 smooth-hover font-medium"
+        >
+          {loading ? (
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+              Updating...
+            </div>
+          ) : (
+            'Update Company'
+          )}
+        </button>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
+
+{/* Add Company Modal */}
+{companyModal && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
+    <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
+      <div className="flex items-center justify-between mb-6 fade-in-blur">
+        <h3 className="text-2xl font-bold text-gray-900">Add New Company</h3>
+        <button
+          onClick={() => setCompanyModal(false)}
+          className="text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          <X className="h-6 w-6" />
+        </button>
+      </div>
+      
+      <div className="space-y-4 stagger-children">
+        {/* Company Name */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Company Name *
+          </label>
+          <input
+            type="text"
+            value={newCompany.name}
+            onChange={(e) => setNewCompany({ ...newCompany, name: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter company name"
+          />
+        </div>
+
+        {/* Partner Type */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Partner Type *
+          </label>
+          <select
+            value={newCompany.partnerType}
+            onChange={(e) => setNewCompany({ ...newCompany, partnerType: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+          >
+            <option value="">Select Partner Type</option>
+            {PARTNER_TYPES.map(type => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Logo Section */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Company Logo *
+          </label>
+          <div className="flex space-x-4 mb-3">
+            <button
+              type="button"
+              onClick={() => setNewCompany({ ...newCompany, logoType: "link" })}
+              className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
+                newCompany.logoType === "link" 
+                  ? "bg-blue-500 text-white" 
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              <Link className="h-4 w-4 mr-2" />
+              URL
+            </button>
+            <button
+              type="button"
+              onClick={() => setNewCompany({ ...newCompany, logoType: "upload" })}
+              className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
+                newCompany.logoType === "upload" 
+                  ? "bg-blue-500 text-white" 
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Upload
+            </button>
+          </div>
+          
+          {newCompany.logoType === "link" ? (
+            <input
+              type="url"
+              value={newCompany.logoUrl}
+              onChange={(e) => setNewCompany({ ...newCompany, logoUrl: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+              placeholder="https://example.com/logo.png"
+            />
+          ) : (
+            <div>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setNewCompany({ ...newCompany, logo: e.target.files?.[0] || null })}
+                className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Supported formats: PNG, JPG, SVG. Max size: 5MB
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Description */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Description
+          </label>
+          <textarea
+            value={newCompany.description}
+            onChange={(e) => setNewCompany({ ...newCompany, description: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Brief description about the company..."
+            rows={3}
+          />
+        </div>
+
+        {/* Website */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Website *
+          </label>
+          <input
+            type="url"
+            value={newCompany.website}
+            onChange={(e) => setNewCompany({ ...newCompany, website: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="https://company-website.com"
+          />
+        </div>
+
+        {/* Booth Number */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Booth Number *
+          </label>
+          <input
+            type="text"
+            value={newCompany.boothNumber}
+            onChange={(e) => setNewCompany({ ...newCompany, boothNumber: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="e.g., A-12, B-05"
+          />
+        </div>
+      </div>
+
+      <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
+        <button
+          onClick={() => setCompanyModal(false)}
+          className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover font-medium"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleCompanySubmit}
+          disabled={loading}
+          className="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-all duration-300 smooth-hover font-medium"
+        >
+          {loading ? (
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+              Adding...
+            </div>
+          ) : (
+            'Add Company'
+          )}
+        </button>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
 
         {/* Event Detail Modal */}
         {eventDetailModal && selectedEventDetail && createPortal(
