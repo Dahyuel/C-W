@@ -296,22 +296,64 @@ const AttendeeDashboard: React.FC = () => {
       setLoading(false);
     }
   };
-
   const fetchUserScore = async () => {
     if (!profile?.id) return;
-
+  
     try {
-      const { data, error } = await getUserRankingAndScore(profile.id);
+      // Use RPC function for attendee score and rank
+      const { data, error } = await supabase.rpc('get_attendee_score_and_rank', {
+        user_uuid: profile.id
+      });
+  
       if (error) {
-        console.error('Error fetching user score:', error);
-      } else if (data) {
-        setUserScore(data);
+        console.error('RPC function error:', error);
+        // Fallback to direct query
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('users_profiles')
+          .select('score')
+          .eq('id', profile.id)
+          .single();
+  
+        if (fallbackError) {
+          console.error('Fallback query error:', fallbackError);
+          setUserScore({
+            score: profile.score || 0,
+            rank: 0,
+            total_users: 0
+          });
+        } else {
+          setUserScore({
+            score: fallbackData?.score || 0,
+            rank: 0,
+            total_users: 0
+          });
+        }
+      } else if (data && data.length > 0) {
+        // RPC function returns a table, so we get the first row
+        const result = data[0];
+        console.log('✅ RPC result:', result);
+        setUserScore({
+          score: result.score || 0,
+          rank: result.user_rank || 0,
+          total_users: result.total_users || 0
+        });
+      } else {
+        console.log('❌ No data returned from RPC');
+        setUserScore({
+          score: profile.score || 0,
+          rank: 0,
+          total_users: 0
+        });
       }
     } catch (error) {
       console.error('Error fetching user score:', error);
+      setUserScore({
+        score: profile.score || 0,
+        rank: 0,
+        total_users: 0
+      });
     }
   };
-
   const fetchRecentActivities = async () => {
     if (!profile?.id) return;
 
@@ -878,21 +920,23 @@ const tabItems = [
           {/* Overview - Responsive */}
           {activeTab === "overview" && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 grid-stagger-blur stagger-animation">
-              {/* Score */}
-              <div 
-                className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 card-hover-enhanced dashboard-card transform transition-all duration-500 hover:scale-105 hover:shadow-xl"
-                style={{ animationDelay: '0ms' }}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Your Score</p>
-                    <p className="text-2xl sm:text-3xl font-bold text-orange-600 animate-pulse">{userScore?.score || 0}</p>
-                  </div>
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-100 rounded-lg flex items-center justify-center transform transition-all duration-500 hover:rotate-12">
-                    <Trophy className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600" />
-                  </div>
-                </div>
-              </div>
+{/* Score */}
+<div 
+  className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 card-hover-enhanced dashboard-card transform transition-all duration-500 hover:scale-105 hover:shadow-xl"
+  style={{ animationDelay: '0ms' }}
+>
+  <div className="flex items-center justify-between">
+    <div>
+      <p className="text-sm font-medium text-gray-600">Your Score</p>
+      <p className="text-2xl sm:text-3xl font-bold text-orange-600 animate-pulse">
+        {userScore?.score || 0}
+      </p>
+    </div>
+    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-100 rounded-lg flex items-center justify-center transform transition-all duration-500 hover:rotate-12">
+      <Trophy className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600" />
+    </div>
+  </div>
+</div>
 
               {/* Rank */}
               <div 
