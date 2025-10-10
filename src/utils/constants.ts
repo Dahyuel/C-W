@@ -2,10 +2,10 @@
 export const FACULTIES = [
   'Faculty of Engineering',
   'Faculty of Medicine',
-  'Faculty of Commerce',
   'Faculty of Law',
   'Faculty of Arts',
   'Faculty of Science',
+  'Faculty of Girls',
   'Faculty of Pharmacy',
   'Faculty of Dentistry',
   'Faculty of Veterinary Medicine',
@@ -21,7 +21,7 @@ export const FACULTIES = [
   'Faculty of Archaeology',
   'Faculty of Social Work',
   'Faculty of Tourism and Hotels',
-  'Faculty of Languages',
+  'Faculty of Alsun',
   'Faculty of Business Administration',
   'Faculty of Applied Arts',
   'Other'

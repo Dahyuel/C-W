@@ -18,7 +18,11 @@ import {
   TrendingUp,
   BarChart3,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  BookOpen,
+  Briefcase,
+  User,
+  Menu
 } from "lucide-react";
 import DashboardLayout from "../../components/shared/DashboardLayout";
 import { supabase, getDynamicBuildingStats, deleteCompany } from "../../lib/supabase";
@@ -40,6 +44,8 @@ interface CompanyItem {
   booth_number?: string;
   partner_type?: string;
   created_at?: string;
+  academic_faculties_seeking_for?: string[];
+  vacancies_type?: string[];
 }
 
 // Add partner type order
@@ -50,6 +56,42 @@ const PARTNER_TYPES = [
   "Tech Partners",
   "Educational Partners",
   "Community Partners"
+];
+
+// Academic Faculties Options
+const ACADEMIC_FACULTIES = [
+  'Faculty of Engineering',
+  'Faculty of Medicine',
+  'Faculty of Law',
+  'Faculty of Arts',
+  'Faculty of Science',
+  'Faculty of Pharmacy',
+  'Faculty of Dentistry',
+  'Faculty of Veterinary Medicine',
+  'Faculty of Agriculture',
+  'Faculty of Education',
+  'Faculty of Nursing',
+  'Faculty of Computer and Information Sciences',
+  'Faculty of Economics and Political Science',
+  'Faculty of Mass Communication',
+  'Faculty of Physical Education',
+  'Faculty of Fine Arts',
+  'Faculty of Music Education',
+  'Faculty of Archaeology',
+  'Faculty of Social Work',
+  'Faculty of Tourism and Hotels',
+  'Faculty of Alsun',
+  'Faculty of Business Administration',
+  'Faculty of Applied Arts',
+];
+
+// Vacancies Type Options
+const VACANCIES_TYPES = [
+  'Full Time',
+  'Part Time',
+  'Internship',
+  'Freelance',
+  'Project Based'
 ];
 
 interface SessionItem {
@@ -93,6 +135,18 @@ interface UserProfileItem {
   degree_level?: 'student' | 'graduate' | string;
   how_did_hear_about_event?: string;
   class?: string;
+}
+
+interface AttendanceItem {
+  id: string;
+  user_id: string;
+  session_id: string;
+  scan_type: string;
+  scanned_by: string;
+  scanned_at: string;
+  location?: string;
+  user?: UserProfileItem;
+  session?: SessionItem;
 }
 
 type DayKey = `day${1|2|3|4|5}`;
@@ -168,6 +222,23 @@ export function AdminPanel() {
   const [eventDetailModal, setEventDetailModal] = useState(false);
   const [selectedEventDetail, setSelectedEventDetail] = useState<EventItem | null>(null);
   
+  // New state for academic faculties and vacancies type
+  const [selectedAcademicFaculties, setSelectedAcademicFaculties] = useState<string[]>([]);
+  const [selectedVacanciesTypes, setSelectedVacanciesTypes] = useState<string[]>([]);
+  const [editSelectedAcademicFaculties, setEditSelectedAcademicFaculties] = useState<string[]>([]);
+  const [editSelectedVacanciesTypes, setEditSelectedVacanciesTypes] = useState<string[]>([]);
+
+  // New state for Open Recruitment Days
+  const [openRecruitmentDay, setOpenRecruitmentDay] = useState<number>(4);
+  const [day4Bookings, setDay4Bookings] = useState<AttendanceItem[]>([]);
+  const [day5Bookings, setDay5Bookings] = useState<AttendanceItem[]>([]);
+  const [selectedBooking, setSelectedBooking] = useState<AttendanceItem | null>(null);
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [deleteBookingModal, setDeleteBookingModal] = useState(false);
+  
+  // Mobile menu state
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
   const announcementRoleOptions = [
     { value: "", label: "Select Target" },
     { value: "all", label: "All Users" },
@@ -199,6 +270,8 @@ export function AdminPanel() {
     website: string; 
     boothNumber: string;
     partnerType: string;
+    academicFaculties: string[];
+    vacanciesType: string[];
   }>({
     id: "",
     name: "",
@@ -209,6 +282,8 @@ export function AdminPanel() {
     website: "",
     boothNumber: "",
     partnerType: "",
+    academicFaculties: [],
+    vacanciesType: [],
   });
 
   const [editSession, setEditSession] = useState<{ id: string; title: string; date: string; speaker: string; capacity: string | number; type: 'session' | string; hour: string; location: string; description: string;}>({
@@ -234,6 +309,7 @@ export function AdminPanel() {
     location: "",
     type: "general",
   });
+  
   const [newCompany, setNewCompany] = useState<{ 
     name: string; 
     logo: File | null; 
@@ -243,6 +319,8 @@ export function AdminPanel() {
     website: string; 
     boothNumber: string;
     partnerType: string;
+    academicFaculties: string[];
+    vacanciesType: string[];
   }>({
     name: "",
     logo: null,
@@ -252,6 +330,8 @@ export function AdminPanel() {
     website: "",
     boothNumber: "",
     partnerType: "",
+    academicFaculties: [],
+    vacanciesType: [],
   });
 
   const [newSession, setNewSession] = useState<{ title: string; date: string; speaker: string; capacity: string | number; type: 'session' | string; hour: string; location: string; description: string;}>({
@@ -313,6 +393,83 @@ export function AdminPanel() {
     setTimeout(() => setFeedback(null), 5000);
   };
 
+  // Animation states
+  const [isTabChanging, setIsTabChanging] = useState(false);
+  const [previousTab, setPreviousTab] = useState("dashboard");
+
+  // Handle tab change with animation
+  const handleTabChange = (tabKey: string) => {
+    if (tabKey === activeTab) return;
+    
+    setIsTabChanging(true);
+    setPreviousTab(activeTab);
+    
+    setTimeout(() => {
+      setActiveTab(tabKey);
+      setIsTabChanging(false);
+      setIsMobileMenuOpen(false);
+    }, 200);
+  };
+
+  // Toggle mobile menu with animation
+  const toggleMobileMenu = () => {
+    setIsMobileMenuOpen(!isMobileMenuOpen);
+  };
+
+  // Animation classes
+  const getTabContentAnimation = () => {
+    if (isTabChanging) {
+      return "opacity-0 scale-95 transform transition-all duration-200 ease-in-out";
+    }
+    return "opacity-100 scale-100 transform transition-all duration-300 ease-out";
+  };
+
+  const getMobileMenuAnimation = () => {
+    if (isMobileMenuOpen) {
+      return "max-h-96 opacity-100 transform transition-all duration-300 ease-out";
+    }
+    return "max-h-0 opacity-0 transform transition-all duration-200 ease-in";
+  };
+
+  const getMenuButtonAnimation = () => {
+    return isMobileMenuOpen 
+      ? "bg-orange-600 transform transition-all duration-300 ease-out" 
+      : "bg-orange-500 transform transition-all duration-300 ease-out";
+  };
+
+  // Helper functions for checkbox handling
+  const handleAcademicFacultyChange = (faculty: string) => {
+    setSelectedAcademicFaculties(prev =>
+      prev.includes(faculty)
+        ? prev.filter(f => f !== faculty)
+        : [...prev, faculty]
+    );
+  };
+
+  const handleVacanciesTypeChange = (type: string) => {
+    setSelectedVacanciesTypes(prev =>
+      prev.includes(type)
+        ? prev.filter(t => t !== type)
+        : [...prev, type]
+    );
+  };
+
+  const handleEditAcademicFacultyChange = (faculty: string) => {
+    setEditSelectedAcademicFaculties(prev =>
+      prev.includes(faculty)
+        ? prev.filter(f => f !== faculty)
+        : [...prev, faculty]
+    );
+  };
+
+  const handleEditVacanciesTypeChange = (type: string) => {
+    setEditSelectedVacanciesTypes(prev =>
+      prev.includes(type)
+        ? prev.filter(t => t !== type)
+        : [...prev, type]
+    );
+  };
+
   // Helper function to get date for a specific day
   const getDateForDay = (day: number): string => {
     const eventStartDate = new Date('2025-10-19');
@@ -333,6 +490,106 @@ export function AdminPanel() {
     const diffTime = date.getTime() - eventStartDate.getTime();
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     return Math.max(1, Math.min(5, diffDays + 1));
+  };
+
+  // Fetch Open Recruitment Day bookings
+  const fetchOpenRecruitmentBookings = async (day: number) => {
+    try {
+      // Calculate the date for the specific day
+      const eventStartDate = new Date('2025-10-19');
+      const targetDate = new Date(eventStartDate);
+      targetDate.setDate(eventStartDate.getDate() + (day - 1));
+      
+      const startOfDay = new Date(targetDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date(targetDate);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      // Fetch bookings for the specific day
+      const { data: bookings, error } = await supabase
+        .from('attendances')
+        .select(`
+          *,
+          user:users_profiles(*),
+          session:sessions(*)
+        `)
+        .eq('scan_type', 'booking')
+        .gte('scanned_at', startOfDay.toISOString())
+        .lte('scanned_at', endOfDay.toISOString())
+        .order('scanned_at', { ascending: false });
+
+      if (error) {
+        console.error(`Error fetching day ${day} bookings:`, error);
+        return [];
+      }
+
+      return bookings || [];
+    } catch (error) {
+      console.error(`Error fetching day ${day} bookings:`, error);
+      return [];
+    }
+  };
+
+  // Load bookings when Open Recruitment tab is active
+  useEffect(() => {
+    if (activeTab === "open-recruitment") {
+      loadOpenRecruitmentBookings();
+    }
+  }, [activeTab, openRecruitmentDay]);
+
+  const loadOpenRecruitmentBookings = async () => {
+    setLoading(true);
+    try {
+      const day4Data = await fetchOpenRecruitmentBookings(4);
+      const day5Data = await fetchOpenRecruitmentBookings(5);
+      
+      setDay4Bookings(day4Data);
+      setDay5Bookings(day5Data);
+    } catch (error) {
+      console.error('Error loading open recruitment bookings:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle booking click
+  const handleBookingClick = (booking: AttendanceItem) => {
+    setSelectedBooking(booking);
+    setShowBookingModal(true);
+  };
+
+  // Handle booking deletion
+  const handleDeleteBooking = async () => {
+    if (!selectedBooking) return;
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('attendances')
+        .delete()
+        .eq('id', selectedBooking.id);
+
+      if (error) {
+        showFeedback("Failed to delete booking", "error");
+      } else {
+        showFeedback("Booking deleted successfully!", "success");
+        setDeleteBookingModal(false);
+        setSelectedBooking(null);
+        // Refresh the bookings
+        await loadOpenRecruitmentBookings();
+      }
+    } catch (error) {
+      showFeedback("Failed to delete booking", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Open delete booking modal
+  const openDeleteBookingModal = (booking: AttendanceItem) => {
+    setSelectedBooking(booking);
+    setDeleteBookingModal(true);
   };
 
   useEffect(() => {
@@ -605,7 +862,11 @@ export function AdminPanel() {
       website: company.website || "",
       boothNumber: company.booth_number || "",
       partnerType: company.partner_type || "",
+      academicFaculties: company.academic_faculties_seeking_for || [],
+      vacanciesType: company.vacancies_type || [],
     });
+    setEditSelectedAcademicFaculties(company.academic_faculties_seeking_for || []);
+    setEditSelectedVacanciesTypes(company.vacancies_type || []);
     setEditCompanyModal(true);
   };
 
@@ -620,13 +881,13 @@ export function AdminPanel() {
     };
 
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
+      <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-gray-600">{title}</p>
-            <p className="text-3xl font-bold text-gray-900">{value}</p>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{value}</p>
           </div>
-          <div className={`w-12 h-12 ${colorClasses[color]} bg-opacity-10 rounded-lg flex items-center justify-center`}>
+          <div className={`w-10 h-10 sm:w-12 sm:h-12 ${colorClasses[color]} bg-opacity-10 rounded-lg flex items-center justify-center`}>
             <div className={colorClasses[color].replace('bg-', 'text-')}>
               {icon}
             </div>
@@ -825,14 +1086,19 @@ export function AdminPanel() {
 
         logoUrl = urlData.publicUrl;
       }
-      const { error } = await supabase.from("companies").update({
+
+      const updateData = {
         name: editCompany.name,
         logo_url: logoUrl,
         description: editCompany.description,
         website: editCompany.website,
         booth_number: editCompany.boothNumber,
         partner_type: editCompany.partnerType,
-      }).eq('id', editCompany.id);
+        academic_faculties_seeking_for: editSelectedAcademicFaculties.length > 0 ? editSelectedAcademicFaculties : null,
+        vacancies_type: editSelectedVacanciesTypes.length > 0 ? editSelectedVacanciesTypes : null,
+      };
+
+      const { error } = await supabase.from("companies").update(updateData).eq('id', editCompany.id);
 
       if (error) {
         showFeedback("Failed to update company", "error");
@@ -848,7 +1114,11 @@ export function AdminPanel() {
           website: "",
           boothNumber: "",
           partnerType: "",
+          academicFaculties: [],
+          vacanciesType: [],
         });
+        setEditSelectedAcademicFaculties([]);
+        setEditSelectedVacanciesTypes([]);
         showFeedback("Company updated successfully!", "success");
         await fetchCompanies();
       }
@@ -917,7 +1187,7 @@ export function AdminPanel() {
     }
   };
 
-  // Enhanced StatisticsTab Component with Inside Event Stats
+  // Enhanced StatisticsTab Component with Fixed Today Filter
   const StatisticsTab = () => {
     const [statsData, setStatsData] = useState<StatsData>({
       totalRegistrations: 0,
@@ -1013,104 +1283,155 @@ export function AdminPanel() {
 
     const fetchRegistrationStats = async () => {
       try {
-        let query = supabase
-          .from('users_profiles')
-          .select('*', { count: 'exact' });
-    
-        // Apply date filters if needed
         if (timeRange === 'today') {
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
+          // Use the edge function for today's stats to avoid 1000 row limit
+          const { data: todayStats, error } = await supabase.rpc('get_today_registration_stats');
           
-          const todayStart = today.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '+00');
-          const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '+00');
-          
-          query = query.gte('created_at', todayStart)
-                      .lt('created_at', todayEnd);
-        } else if (timeRange === 'week') {
-          const weekAgo = new Date();
-          weekAgo.setDate(weekAgo.getDate() - 7);
-          weekAgo.setHours(0, 0, 0, 0);
-          
-          const weekAgoStart = weekAgo.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '+00');
-          
-          query = query.gte('created_at', weekAgoStart);
-        }
-    
-        const { data: users, error, count } = await query;
-    
-        if (error) {
-          console.error('Query error:', error);
-          throw error;
-        }
-    
-        let allUsers = users || [];
-        
-        if (timeRange === 'all' && count && count > 1000) {
-          const pageSize = 1000;
-          const totalPages = Math.ceil(count / pageSize);
-          allUsers = [];
-          
-          for (let page = 0; page < totalPages; page++) {
-            const { data: pageUsers, error: pageError } = await supabase
-              .from('users_profiles')
-              .select('*')
-              .range(page * pageSize, (page + 1) * pageSize - 1);
-              
-            if (pageError) throw pageError;
-            if (pageUsers) allUsers = [...allUsers, ...pageUsers];
-          }
-        }
-    
-        const stats = processUserStatistics(allUsers as UserProfileItem[]);
-        setStatsData(prev => ({ ...prev, ...stats } as StatsData));
-      } catch (error) {
-        console.error('Error fetching registration stats:', error);
-        try {
-          let countQuery = supabase
-            .from('users_profiles')
-            .select('*', { count: 'exact', head: true });
-    
-          if (timeRange === 'today') {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const todayStart = today.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '+00');
-            const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '+00');
-            
-            countQuery = countQuery.gte('created_at', todayStart)
-                                  .lt('created_at', todayEnd);
-          } else if (timeRange === 'week') {
-            const weekAgo = new Date();
-            weekAgo.setDate(weekAgo.getDate() - 7);
-            weekAgo.setHours(0, 0, 0, 0);
-            const weekAgoStart = weekAgo.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '+00');
-            
-            countQuery = countQuery.gte('created_at', weekAgoStart);
-          }
-    
-          const { count, error: countError } = await countQuery;
-          
-          if (!countError && count !== null) {
+          if (error) {
+            console.error('Error fetching today stats:', error);
+            // Fallback to regular query
+            await fetchTodayStatsFallback();
+          } else if (todayStats && todayStats.length > 0) {
+            const stats = todayStats[0];
             setStatsData(prev => ({
               ...prev,
-              totalRegistrations: count,
-              students: 0,
-              graduates: 0,
-              currentInEvent: 0,
-              currentInBuilding: 0,
+              totalRegistrations: Number(stats.total_registrations) || 0,
+              graduates: Number(stats.graduates) || 0,
+              students: Number(stats.students) || 0,
+              currentInEvent: Number(stats.current_in_event) || 0,
+              currentInBuilding: Number(stats.current_in_building) || 0,
+              genderStats: {
+                male: Number(stats.male_count) || 0,
+                female: Number(stats.female_count) || 0
+              },
+              degreeLevelStats: {
+                student: Number(stats.student_count) || 0,
+                graduate: Number(stats.graduate_count) || 0
+              },
+              // For today, we'll keep other arrays empty to avoid heavy queries
               universities: [],
               faculties: [],
-              genderStats: { male: 0, female: 0 },
               roleStats: {},
               marketingSources: [],
-              degreeLevelStats: { student: 0, graduate: 0 },
               classYearStats: {},
               currentGenderStats: { male: 0, female: 0 }
             }));
           }
-        } catch (fallbackError) {
-          console.error('Fallback query also failed:', fallbackError);
+        } else {
+          // All time - use the existing logic
+          let query = supabase
+            .from('users_profiles')
+            .select('*', { count: 'exact' });
+
+          const { data: users, error, count } = await query;
+
+          if (error) {
+            console.error('Query error:', error);
+            throw error;
+          }
+
+          let allUsers = users || [];
+          
+          if (count && count > 1000) {
+            const pageSize = 1000;
+            const totalPages = Math.ceil(count / pageSize);
+            allUsers = [];
+            
+            for (let page = 0; page < totalPages; page++) {
+              const { data: pageUsers, error: pageError } = await supabase
+                .from('users_profiles')
+                .select('*')
+                .range(page * pageSize, (page + 1) * pageSize - 1);
+                
+              if (pageError) throw pageError;
+              if (pageUsers) allUsers = [...allUsers, ...pageUsers];
+            }
+          }
+
+          const stats = processUserStatistics(allUsers as UserProfileItem[]);
+          setStatsData(prev => ({ ...prev, ...stats } as StatsData));
         }
+      } catch (error) {
+        console.error('Error fetching registration stats:', error);
+        await fetchRegistrationStatsFallback();
+      }
+    };
+
+    const fetchTodayStatsFallback = async () => {
+      try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const todayStart = today.toISOString();
+        const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString();
+        
+        const { count, error } = await supabase
+          .from('users_profiles')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', todayStart)
+          .lt('created_at', todayEnd);
+
+        if (!error && count !== null) {
+          setStatsData(prev => ({
+            ...prev,
+            totalRegistrations: count,
+            students: 0,
+            graduates: 0,
+            currentInEvent: 0,
+            currentInBuilding: 0,
+            universities: [],
+            faculties: [],
+            genderStats: { male: 0, female: 0 },
+            roleStats: {},
+            marketingSources: [],
+            degreeLevelStats: { student: 0, graduate: 0 },
+            classYearStats: {},
+            currentGenderStats: { male: 0, female: 0 }
+          }));
+        }
+      } catch (fallbackError) {
+        console.error('Fallback query also failed:', fallbackError);
+      }
+    };
+
+    const fetchRegistrationStatsFallback = async () => {
+      try {
+        let countQuery = supabase
+          .from('users_profiles')
+          .select('*', { count: 'exact', head: true });
+
+        if (timeRange === 'today') {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const todayStart = today.toISOString();
+          const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString();
+          
+          countQuery = countQuery.gte('created_at', todayStart)
+                              .lt('created_at', todayEnd);
+        }
+
+        const { count, error: countError } = await countQuery;
+        
+        if (!countError && count !== null) {
+          setStatsData(prev => ({
+            ...prev,
+            totalRegistrations: count,
+            students: 0,
+            graduates: 0,
+            currentInEvent: 0,
+            currentInBuilding: 0,
+            universities: [],
+            faculties: [],
+            genderStats: { male: 0, female: 0 },
+            roleStats: {},
+            marketingSources: [],
+            degreeLevelStats: { student: 0, graduate: 0 },
+            classYearStats: {},
+            currentGenderStats: { male: 0, female: 0 }
+          }));
+        }
+      } catch (fallbackError) {
+        console.error('Fallback query also failed:', fallbackError);
       }
     };
 
@@ -1221,13 +1542,13 @@ export function AdminPanel() {
     }
 
     return (
-      <div className="space-y-8 fade-in-blur">
+      <div className="space-y-6 sm:space-y-8 fade-in-blur">
         {/* Stats Type and Time Range Filter */}
         <div className="space-y-4 fade-in-blur">
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setStatsType('registration')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
+              className={`px-3 py-2 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
                 statsType === 'registration' 
                   ? 'bg-orange-500 text-white' 
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1237,7 +1558,7 @@ export function AdminPanel() {
             </button>
             <button
               onClick={() => setStatsType('event')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
+              className={`px-3 py-2 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
                 statsType === 'event' 
                   ? 'bg-orange-500 text-white' 
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1247,41 +1568,30 @@ export function AdminPanel() {
             </button>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setTimeRange('today')}
-              disabled={statsType === 'event'}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
-                timeRange === 'today' 
-                  ? 'bg-orange-500 text-white' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              } ${statsType === 'event' ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              Today
-            </button>
-            <button
-              onClick={() => setTimeRange('week')}
-              disabled={statsType === 'event'}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
-                timeRange === 'week' 
-                  ? 'bg-orange-500 text-white' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              } ${statsType === 'event' ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              Last 7 Days
-            </button>
-            <button
-              onClick={() => setTimeRange('all')}
-              disabled={statsType === 'event'}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
-                timeRange === 'all' 
-                  ? 'bg-orange-500 text-white' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              } ${statsType === 'event' ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              All Time
-            </button>
-          </div>
+          {statsType === 'registration' && (
+            <div className="flex flex-wrap gap-2 fade-in-blur">
+              <button
+                onClick={() => setTimeRange('today')}
+                className={`px-3 py-2 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
+                  timeRange === 'today' 
+                    ? 'bg-orange-500 text-white' 
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Today
+              </button>
+              <button
+                onClick={() => setTimeRange('all')}
+                className={`px-3 py-2 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
+                  timeRange === 'all' 
+                    ? 'bg-orange-500 text-white' 
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                All Time
+              </button>
+            </div>
+          )}
 
           {statsType === 'event' && (
             <div className="flex flex-wrap gap-2 fade-in-blur">
@@ -1289,7 +1599,7 @@ export function AdminPanel() {
                 <button
                   key={day}
                   onClick={() => setSelectedDay(day)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
+                  className={`px-3 py-2 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
                     selectedDay === day 
                       ? 'bg-orange-500 text-white' 
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1304,7 +1614,7 @@ export function AdminPanel() {
 
         {/* Conditional Content based on Stats Type */}
         {statsType === 'registration' ? (
-          <RegistrationStatsView statsData={statsData} />
+          <RegistrationStatsView statsData={statsData} timeRange={timeRange} />
         ) : (
           <EventStatsView statsData={statsData} selectedDay={selectedDay} />
         )}
@@ -1316,70 +1626,83 @@ export function AdminPanel() {
   };
 
   // Registration Stats View Component
-  const RegistrationStatsView: React.FC<{ statsData: StatsData }> = ({ statsData }) => (
-    <div className="space-y-8 fade-in-blur">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 stagger-children">
+  const RegistrationStatsView: React.FC<{ statsData: StatsData; timeRange: string }> = ({ statsData, timeRange }) => (
+    <div className="space-y-6 sm:space-y-8 fade-in-blur">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 stagger-children">
         <StatCard
           title="Total Registrations"
           value={statsData.totalRegistrations}
-          icon={<Users className="h-6 w-6" />}
+          icon={<Users className="h-5 w-5 sm:h-6 sm:w-6" />}
           color="blue"
         />
         <StatCard
           title="Students"
           value={statsData.students}
-          icon={<Users className="h-6 w-6" />}
+          icon={<Users className="h-5 w-5 sm:h-6 sm:w-6" />}
           color="green"
         />
         <StatCard
           title="Graduates"
           value={statsData.graduates}
-          icon={<Users className="h-6 w-6" />}
+          icon={<Users className="h-5 w-5 sm:h-6 sm:w-6" />}
           color="purple"
         />
         <StatCard
           title="Currently in Event"
           value={statsData.currentInEvent}
-          icon={<Activity className="h-6 w-6" />}
+          icon={<Activity className="h-5 w-5 sm:h-6 sm:w-6" />}
           color="orange"
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 stagger-children">
-        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Gender Distribution</h3>
-          <GenderChart data={statsData.genderStats} title="Total Registrations" />
-        </div>
+      {timeRange === 'all' && (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 stagger-children">
+            <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Gender Distribution</h3>
+              <GenderChart data={statsData.genderStats} title="Total Registrations" />
+            </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Role Distribution</h3>
-          <RoleChart data={statsData.roleStats} />
-        </div>
-      </div>
+            <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Role Distribution</h3>
+              <RoleChart data={statsData.roleStats} />
+            </div>
+          </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 stagger-children">
-        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Universities</h3>
-          <BarChart data={statsData.universities} color="blue" title="" />
-        </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 stagger-children">
+            <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Universities</h3>
+              <BarChart data={statsData.universities} color="blue" title="" />
+            </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Faculties</h3>
-          <BarChart data={statsData.faculties} color="green" title="" />
-        </div>
-      </div>
+            <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Faculties</h3>
+              <BarChart data={statsData.faculties} color="green" title="" />
+            </div>
+          </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 stagger-children">
-        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Marketing Sources</h3>
-          <MarketingChart data={statsData.marketingSources} />
-        </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 stagger-children">
+            <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Marketing Sources</h3>
+              <MarketingChart data={statsData.marketingSources} />
+            </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Degree Level</h3>
-          <DegreeChart data={statsData.degreeLevelStats} />
+            <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Degree Level</h3>
+              <DegreeChart data={statsData.degreeLevelStats} />
+            </div>
+          </div>
+        </>
+      )}
+
+      {timeRange === 'today' && (
+        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Today's Summary</h3>
+          <p className="text-gray-600">
+            Showing registration statistics for today. Detailed analytics are available in "All Time" view.
+          </p>
         </div>
-      </div>
+      )}
     </div>
   );
 
@@ -1464,42 +1787,42 @@ export function AdminPanel() {
     };
 
     return (
-      <div className="space-y-8 fade-in-blur">
+      <div className="space-y-6 sm:space-y-8 fade-in-blur">
         {/* Day Stats Cards */}
-        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
+        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
             Day {selectedDay} - {getDateForDay(selectedDay)}
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 stagger-children">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 stagger-children">
             <StatCard
               title="Entries"
               value={dayStats.entries}
-              icon={<TrendingUp className="h-6 w-6" />}
+              icon={<TrendingUp className="h-5 w-5 sm:h-6 sm:w-6" />}
               color="green"
             />
             <StatCard
               title="Exits"
               value={dayStats.exits}
-              icon={<TrendingUp className="h-6 w-6" />}
+              icon={<TrendingUp className="h-5 w-5 sm:h-6 sm:w-6" />}
               color="red"
             />
             <StatCard
               title="Building Entries"
               value={dayStats.building_entries}
-              icon={<Building className="h-6 w-6" />}
+              icon={<Building className="h-5 w-5 sm:h-6 sm:w-6" />}
               color="blue"
             />
             <StatCard
               title="Session Entries"
               value={dayStats.session_entries}
-              icon={<Calendar className="h-6 w-6" />}
+              icon={<Calendar className="h-5 w-5 sm:h-6 sm:w-6" />}
               color="purple"
             />
           </div>
         </div>
 
         {/* Inside Event Analytics Section */}
-        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
+        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Inside Event Analytics</h3>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div>
@@ -1518,8 +1841,8 @@ export function AdminPanel() {
         </div>
 
         {/* Faculty and University Analysis Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 stagger-children">
-          <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 stagger-children">
+          <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
               <BarChart3 className="h-5 w-5 mr-2 text-blue-600" />
               Top Faculties Inside Event
@@ -1531,7 +1854,7 @@ export function AdminPanel() {
             />
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
+          <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
               <BarChart3 className="h-5 w-5 mr-2 text-green-600" />
               Top Universities Inside Event
@@ -1545,20 +1868,20 @@ export function AdminPanel() {
         </div>
 
         {/* Activity Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 stagger-children">
-          <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 stagger-children">
+          <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Daily Activity</h3>
             <DailyActivityChart selectedDay={selectedDay} />
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
+          <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Attendance Flow</h3>
             <AttendanceFlowChart dayStats={dayStats} />
           </div>
         </div>
 
         {/* Session Popularity */}
-        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
+        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Session Popularity</h3>
           <SessionPopularityChart selectedDay={selectedDay} />
         </div>
@@ -1569,31 +1892,31 @@ export function AdminPanel() {
   // Current State Widget
   const CurrentStateWidget: React.FC<{ statsData: StatsData }> = ({ statsData }) => (
     <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden fade-in-blur card-hover dashboard-card">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50">
-        <h2 className="text-3xl font-bold text-black-800 flex items-center gap-2 mx-auto">
-          <Activity className="h-7 w-7 text-orange-500" />
+      <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-100 bg-gray-50">
+        <h2 className="text-xl sm:text-3xl font-bold text-black-800 flex items-center gap-2 mx-auto">
+          <Activity className="h-5 w-5 sm:h-7 sm:w-7 text-orange-500" />
           Current State
         </h2>
       </div>
 
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <div className="overflow-x-auto">
-          <table className="min-w-full text-lg font-bold text-left border border-gray-200 rounded-lg overflow-hidden">
-            <thead className="bg-gray-100 text-gray-800 text-xl font-extrabold">
+          <table className="min-w-full text-sm sm:text-lg font-bold text-left border border-gray-200 rounded-lg overflow-hidden">
+            <thead className="bg-gray-100 text-gray-800 text-sm sm:text-xl font-extrabold">
               <tr>
-                <th className="px-4 py-3">Site</th>
-                <th className="px-4 py-3">Maximum Capacity</th>
-                <th className="px-4 py-3">Current Capacity</th>
-                <th className="px-4 py-3">Status</th>
+                <th className="px-3 sm:px-4 py-2 sm:py-3">Site</th>
+                <th className="px-3 sm:px-4 py-2 sm:py-3">Maximum Capacity</th>
+                <th className="px-3 sm:px-4 py-2 sm:py-3">Current Capacity</th>
+                <th className="px-3 sm:px-4 py-2 sm:py-3">Status</th>
               </tr>
             </thead>
             <tbody>
               <tr className="border-t">
-                <td className="px-4 py-3">Building</td>
-                <td className="px-4 py-3 text-red-600">350</td>
-                <td className="px-4 py-3">{statsData.currentInBuilding}</td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-1 rounded-full text-sm font-medium ${
+                <td className="px-3 sm:px-4 py-2 sm:py-3">Building</td>
+                <td className="px-3 sm:px-4 py-2 sm:py-3 text-red-600">350</td>
+                <td className="px-3 sm:px-4 py-2 sm:py-3">{statsData.currentInBuilding}</td>
+                <td className="px-3 sm:px-4 py-2 sm:py-3">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                     statsData.currentInBuilding < 280 
                       ? 'bg-green-100 text-green-800' 
                       : statsData.currentInBuilding < 315 
@@ -1605,11 +1928,11 @@ export function AdminPanel() {
                 </td>
               </tr>
               <tr className="border-t">
-                <td className="px-4 py-3">Event</td>
-                <td className="px-4 py-3 text-red-600">1500</td>
-                <td className="px-4 py-3">{statsData.currentInEvent}</td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-1 rounded-full text-sm font-medium ${
+                <td className="px-3 sm:px-4 py-2 sm:py-3">Event</td>
+                <td className="px-3 sm:px-4 py-2 sm:py-3 text-red-600">1500</td>
+                <td className="px-3 sm:px-4 py-2 sm:py-3">{statsData.currentInEvent}</td>
+                <td className="px-3 sm:px-4 py-2 sm:py-3">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                     statsData.currentInEvent < 1200 
                       ? 'bg-green-100 text-green-800' 
                       : statsData.currentInEvent < 1350 
@@ -1944,14 +2267,18 @@ export function AdminPanel() {
         logoUrl = urlData.publicUrl;
       }
 
-      const { error } = await supabase.from("companies").insert({
+      const insertData = {
         name: newCompany.name,
         logo_url: logoUrl,
         description: newCompany.description,
         website: newCompany.website,
         booth_number: newCompany.boothNumber,
         partner_type: newCompany.partnerType,
-      });
+        academic_faculties_seeking_for: selectedAcademicFaculties.length > 0 ? selectedAcademicFaculties : null,
+        vacancies_type: selectedVacanciesTypes.length > 0 ? selectedVacanciesTypes : null,
+      };
+
+      const { error } = await supabase.from("companies").insert(insertData);
 
       if (error) {
         showFeedback("Failed to add company", "error");
@@ -1966,7 +2293,11 @@ export function AdminPanel() {
           website: "",
           boothNumber: "",
           partnerType: "",
+          academicFaculties: [],
+          vacanciesType: [],
         });
+        setSelectedAcademicFaculties([]);
+        setSelectedVacanciesTypes([]);
         showFeedback("Company added successfully!", "success");
         await fetchCompanies();
       }
@@ -2395,7 +2726,8 @@ export function AdminPanel() {
     { key: "sessions", label: "Sessions" },
     { key: "events", label: "Events" },
     { key: "maps", label: "Maps" },
-    { key: "companies", label: "Companies" }
+    { key: "companies", label: "Companies" },
+    { key: "open-recruitment", label: "Open Recruitment Days" }
   ];
 
   if (loadingData) {
@@ -2413,7 +2745,35 @@ export function AdminPanel() {
       title="Admin Panel"
       subtitle="System administration, user management, and analytics"
     >
-      <div className="space-y-8 fade-in-up-blur">
+      <style>{`
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        .stagger-animation > * {
+          animation: fadeInUp 0.6s ease-out forwards;
+        }
+      `}</style>
+      
+      <div className="fade-in-up-blur">
         {/* Feedback Toast */}
         {feedback && createPortal(
           <div className={`fixed top-4 right-4 z-[200] flex items-center space-x-2 px-4 py-3 rounded-lg shadow-lg fade-in-blur ${
@@ -2437,424 +2797,603 @@ export function AdminPanel() {
           document.body
         )}
 
-        {/* Tabs */}
-        <div className="flex space-x-1 sm:space-x-4 border-b mb-6 overflow-x-auto scrollbar-hide fade-in-blur">
-          {tabItems.map((tab) => (
+        {/* Mobile Menu Button with Animation */}
+        <div className="lg:hidden flex justify-between items-center mb-4 transform transition-all duration-300">
+          <button
+            onClick={toggleMobileMenu}
+            className={`p-2 rounded-lg text-white ${getMenuButtonAnimation()} transform transition-all duration-300 hover:scale-110`}
+          >
+            <Menu className="h-5 w-5 transform transition-transform duration-300" />
+          </button>
+          <span className="text-sm font-medium text-gray-600 capitalize animate-pulse">
+            {activeTab.replace('-', ' ')}
+          </span>
+        </div>
+
+        {/* Tabs - Responsive with Animations */}
+        <div 
+          className={`${getMobileMenuAnimation()} lg:flex lg:max-h-none lg:opacity-100 space-x-1 sm:space-x-4 border-b mb-6 overflow-x-auto scrollbar-hide fade-in-left flex-col lg:flex-row overflow-hidden`}
+        >
+          {tabItems.map((tab, index) => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`py-2 px-2 sm:px-4 font-semibold text-sm sm:text-base whitespace-nowrap transition-all duration-300 smooth-hover ${
+              onClick={() => handleTabChange(tab.key)}
+              className={`py-3 px-4 lg:py-2 lg:px-4 font-semibold text-sm lg:text-base whitespace-nowrap transition-all duration-300 text-left lg:text-center border-b lg:border-b-2 border-transparent transform hover:scale-105 ${
                 activeTab === tab.key
-                  ? "border-b-2 border-orange-500 text-orange-600"
-                  : "text-gray-500 hover:text-orange-600"
+                  ? "bg-orange-50 lg:bg-transparent border-orange-500 text-orange-600 lg:border-orange-500 scale-105 shadow-lg"
+                  : "text-gray-500 hover:text-orange-600 hover:bg-gray-50 lg:hover:bg-transparent"
               }`}
+              style={{
+                animationDelay: `${index * 100}ms`,
+                animation: 'slideDown 0.5s ease-out forwards'
+              }}
             >
               {tab.label}
             </button>
           ))}
         </div>
 
-        {/* Dashboard Tab */}
-        {activeTab === "dashboard" && (
-          <div className="space-y-8 fade-in-blur">
-            {/* Quick Actions */}
-            <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 text-center fade-in-blur card-hover dashboard-card">
-              <h1 className="text-3xl font-bold text-black-800 flex items-center justify-center gap-2 mb-6">
-                <Sparkles className="h-7 w-7 text-orange-500" />
-                Quick Actions
-              </h1>
+        {/* Tab Content with Smooth Transitions */}
+        <div className={getTabContentAnimation()}>
+          {/* Dashboard Tab - Responsive */}
+          {activeTab === "dashboard" && (
+            <div className="space-y-6 sm:space-y-8 fade-in-blur">
+              {/* Quick Actions */}
+              <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 text-center fade-in-blur card-hover dashboard-card">
+                <h1 className="text-xl sm:text-3xl font-bold text-black-800 flex items-center justify-center gap-2 mb-4 sm:mb-6">
+                  <Sparkles className="h-5 w-5 sm:h-7 sm:w-7 text-orange-500" />
+                  Quick Actions
+                </h1>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 stagger-children">
-                <button
-                  onClick={() => setCompanyModal(true)}
-                  className="flex flex-col items-center justify-center py-6 px-4 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-all duration-300 smooth-hover"
-                >
-                  <Building className="h-8 w-8 mb-2" />
-                  <span className="text-base font-medium">Add Company</span>
-                </button>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 stagger-children">
+                  <button
+                    onClick={() => setCompanyModal(true)}
+                    className="flex flex-col items-center justify-center py-4 sm:py-6 px-3 sm:px-4 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-all duration-300 smooth-hover"
+                  >
+                    <Building className="h-6 w-6 sm:h-8 sm:w-8 mb-2" />
+                    <span className="text-sm sm:text-base font-medium">Add Company</span>
+                  </button>
 
+                  <button
+                    onClick={() => setSessionModal(true)}
+                    className="flex flex-col items-center justify-center py-4 sm:py-6 px-3 sm:px-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-all duration-300 smooth-hover"
+                  >
+                    <Calendar className="h-6 w-6 sm:h-8 sm:w-8 mb-2" />
+                    <span className="text-sm sm:text-base font-medium">Add Session</span>
+                  </button>
+
+                  <button
+                    onClick={() => setAnnouncementModal(true)}
+                    className="flex flex-col items-center justify-center py-4 sm:py-6 px-3 sm:px-4 bg-purple-500 text-white rounded-xl hover:bg-purple-700 transition-all duration-300 smooth-hover"
+                  >
+                    <Megaphone className="h-6 w-6 sm:h-8 sm:w-8 mb-2" />
+                    <span className="text-sm sm:text-base font-medium">Send Announcement</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 stagger-children">
+                <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Total Users</p>
+                      <p className="text-2xl sm:text-3xl font-bold text-orange-600">
+                        {stats?.total_users || 0}
+                      </p>
+                    </div>
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <Users className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Total Attendees</p>
+                      <p className="text-2xl sm:text-3xl font-bold text-blue-600">
+                        {buildingStats?.total_attendees || 0}
+                      </p>
+                    </div>
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <Users className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Total Volunteers</p>
+                      <p className="text-2xl sm:text-3xl font-bold text-green-600">
+                        {(stats?.total_users || 0) - (buildingStats?.total_attendees || 0)}
+                      </p>
+                    </div>
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                      <Users className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Statistics Tab */}
+          {activeTab === "statistics" && (
+            <StatisticsTab />
+          )}
+
+          {/* Sessions Tab - Responsive */}
+          {activeTab === "sessions" && (
+            <div className="fade-in-blur">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6">
+                <h2 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center mb-4 sm:mb-0 fade-in-blur">
+                  <Calendar className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-orange-600" /> Sessions Management
+                </h2>
                 <button
                   onClick={() => setSessionModal(true)}
-                  className="flex flex-col items-center justify-center py-6 px-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-all duration-300 smooth-hover"
+                  className="flex items-center px-3 sm:px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-300 smooth-hover fade-in-blur"
                 >
-                  <Calendar className="h-8 w-8 mb-2" />
-                  <span className="text-base font-medium">Add Session</span>
+                  <Plus className="h-4 w-4 mr-2" />
+                  <span className="text-sm sm:text-base">Add Session</span>
                 </button>
+              </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 stagger-children">
+                {sessions.map((session) => (
+                  <div 
+                    key={session.id} 
+                    onClick={() => handleSessionClick(session)}
+                    className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 hover:shadow-md transition-all duration-300 smooth-hover card-hover fade-in-blur"
+                  >
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">{session.title}</h3>
+                    <p className="text-xs sm:text-sm text-gray-600 mb-3 line-clamp-2">{session.description}</p>
+                    {session.speaker && (
+                      <p className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Speaker: {session.speaker}</p>
+                    )}
+                    <div className="space-y-1 text-xs text-gray-500 mb-4">
+                      <div className="flex items-center">
+                        <Clock className="h-3 w-3 mr-1" />
+                        {new Date(session.start_time).toLocaleDateString()} {new Date(session.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                      <div className="flex items-center">
+                        <MapPin className="h-3 w-3 mr-1" />
+                        {session.location}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
+                        {session.session_type}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {session.current_bookings || 0}/{session.capacity || 'Unlimited'}
+                      </span>
+                    </div>
+                    
+                    <div className="flex gap-2 mt-4">
+                      <button
+                        onClick={() => handleSessionClick(session)}
+                        className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+                      >
+                        <Eye className="h-3 w-3 mr-1 inline" />
+                        View
+                      </button>
+                      <button
+                        onClick={() => handleEditSession(session)}
+                        className="flex-1 bg-blue-500 text-white py-2 px-3 rounded-lg hover:bg-blue-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteSession(session)}
+                        className="flex-1 bg-red-500 text-white py-2 px-3 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+                      >
+                        <Trash2 className="h-3 w-3 mr-1 inline" />
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Events Tab - Responsive */}
+          {activeTab === "events" && (
+            <div className="fade-in-blur">
+              <div className="mb-4 sm:mb-6">
+                <h2 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center mb-4 fade-in-blur">
+                  <Calendar className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-orange-600" /> Events Management
+                </h2>
+
+                <div className="flex space-x-1 mb-4 fade-in-blur">
+                  {[1, 2, 3, 4, 5].map((day) => (
+                    <button
+                      key={day}
+                      onClick={() => setActiveDay(day)}
+                      className={`px-2 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover min-w-16 sm:min-w-20 ${
+                        activeDay === day 
+                          ? "bg-orange-500 text-white" 
+                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      }`}
+                    >
+                      Day {day}<br />
+                      <span className="text-xs">{getDateForDay(day).split(',')[0]}</span>
+                    </button>
+                  ))}
+                </div>
+                
                 <button
-                  onClick={() => setAnnouncementModal(true)}
-                  className="flex flex-col items-center justify-center py-6 px-4 bg-purple-500 text-white rounded-xl hover:bg-purple-700 transition-all duration-300 smooth-hover"
+                  onClick={() => setEventModal(true)}
+                  className="w-full sm:w-auto flex items-center justify-center px-3 sm:px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-all duration-300 smooth-hover fade-in-blur"
                 >
-                  <Megaphone className="h-8 w-8 mb-2" />
-                  <span className="text-base font-medium">Send Announcement</span>
+                  <Plus className="h-4 w-4 mr-2" />
+                  <span className="text-sm sm:text-base">Add Event</span>
                 </button>
               </div>
-            </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 stagger-children">
-              <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Total Users</p>
-                    <p className="text-3xl font-bold text-orange-600">
-                      {stats?.total_users || 0}
-                    </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 stagger-children">
+                {events.map((event) => (
+                  <div key={event.id} className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover smooth-hover">
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">{event.title}</h3>
+                    <p className="text-xs sm:text-sm text-gray-600 mb-3">{event.description}</p>
+                    <div className="space-y-1 text-xs text-gray-500 mb-4">
+                      <div className="flex items-center">
+                        <Clock className="h-3 w-3 mr-1" />
+                        {new Date(event.start_time).toLocaleDateString()} {new Date(event.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                      <div className="flex items-center">
+                        <MapPin className="h-3 w-3 mr-1" />
+                        {event.location}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-xs px-2 py-1 bg-purple-100 text-purple-800 rounded-full">
+                        {event.item_type}
+                      </span>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEventClick(event)}
+                        className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+                      >
+                        <Eye className="h-3 w-3 mr-1 inline" />
+                        View
+                      </button>
+                      <button
+                        onClick={() => handleEditEvent(event)}
+                        className="flex-1 bg-green-500 text-white py-2 px-3 rounded-lg hover:bg-green-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteEvent(event)}
+                        className="flex-1 bg-red-500 text-white py-2 px-3 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+                      >
+                        <Trash2 className="h-3 w-3 mr-1 inline" />
+                        Delete
+                      </button>
+                    </div>
                   </div>
-                  <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                    <Users className="h-6 w-6 text-orange-600" />
-                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Maps Tab - Responsive */}
+          {activeTab === "maps" && (
+            <div className="fade-in-blur">
+              <div className="mb-4 sm:mb-6">
+                <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 fade-in-blur">Event Maps</h2>
+                
+                <div className="flex space-x-1 sm:space-x-2 mb-4 fade-in-blur overflow-x-auto pb-2">
+                  {[1, 2, 3, 4, 5].map((day) => (
+                    <button
+                      key={day}
+                      onClick={() => setActiveDay(day)}
+                      className={`px-2 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover flex-shrink-0 ${
+                        activeDay === day 
+                          ? "bg-orange-500 text-white" 
+                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      }`}
+                    >
+                      Day {day}
+                    </button>
+                  ))}
                 </div>
               </div>
-
-              <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Total Attendees</p>
-                    <p className="text-3xl font-bold text-blue-600">
-                      {buildingStats?.total_attendees || 0}
-                    </p>
+              
+              <div className="bg-white rounded-xl shadow-sm border p-3 sm:p-4 flex justify-center items-center min-h-[300px] sm:min-h-[400px] fade-in-blur card-hover">
+                {mapLoading && (
+                  <div className="flex flex-col items-center justify-center fade-in-blur">
+                    <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-b-2 border-orange-500 mb-2"></div>
+                    <p className="text-gray-500 text-xs sm:text-sm">Loading map...</p>
                   </div>
-                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <Users className="h-6 w-6 text-blue-600" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Total Volunteers</p>
-                    <p className="text-3xl font-bold text-green-600">
-                      {(stats?.total_users || 0) - (buildingStats?.total_attendees || 0)}
-                    </p>
-                  </div>
-                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                    <Users className="h-6 w-6 text-green-600" />
-                  </div>
-                </div>
+                )}
+                <img
+                  src={mapImages[activeDay - 1]}
+                  alt={`Day ${activeDay} Map`}
+                  className={`max-w-full h-auto rounded-lg transition-opacity duration-200 ${mapLoading ? 'opacity-0 absolute' : 'opacity-100'}`}
+                  onLoad={handleMapLoad}
+                  onError={(e) => {
+                    handleMapError();
+                    (e.currentTarget as HTMLImageElement).src = "/src/Assets/placeholder-map.png";
+                  }}
+                />
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Statistics Tab */}
-        {activeTab === "statistics" && (
-          <StatisticsTab />
-        )}
-
-        {/* Sessions Tab */}
-        {activeTab === "sessions" && (
-          <div className="fade-in-blur">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-gray-900 flex items-center mb-4 sm:mb-0 fade-in-blur">
-                <Calendar className="h-5 w-5 mr-2 text-orange-600" /> Sessions Management
-              </h2>
-              <button
-                onClick={() => setSessionModal(true)}
-                className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-300 smooth-hover fade-in-blur"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Session
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 stagger-children">
-              {sessions.map((session) => (
-                <div 
-                  key={session.id} 
-                  className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 hover:shadow-md transition-all duration-300 smooth-hover card-hover fade-in-blur"
+          {/* Companies Tab - Responsive */}
+          {activeTab === "companies" && (
+            <div className="fade-in-blur">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6">
+                <h2 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center mb-4 sm:mb-0 fade-in-blur">
+                  <Building className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-orange-600" /> Companies Management
+                </h2>
+                <button
+                  onClick={() => setCompanyModal(true)}
+                  className="flex items-center px-3 sm:px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all duration-300 smooth-hover fade-in-blur"
                 >
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{session.title}</h3>
-                  <p className="text-sm text-gray-600 mb-3 line-clamp-2">{session.description}</p>
-                  {session.speaker && (
-                    <p className="text-sm font-medium text-gray-900 mb-2">Speaker: {session.speaker}</p>
-                  )}
-                  <div className="space-y-1 text-xs text-gray-500 mb-4">
-                    <div className="flex items-center">
-                      <Clock className="h-3 w-3 mr-1" />
-                      {new Date(session.start_time).toLocaleDateString()} {new Date(session.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </div>
-                    <div className="flex items-center">
-                      <MapPin className="h-3 w-3 mr-1" />
-                      {session.location}
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
-                      {session.session_type}
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      {session.current_bookings || 0}/{session.capacity || 'Unlimited'}
-                    </span>
-                  </div>
-                  
-                  <div className="flex gap-2 mt-4">
-                    <button
-                      onClick={() => handleSessionClick(session)}
-                      className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover text-sm font-medium"
-                    >
-                      <Eye className="h-3 w-3 mr-1 inline" />
-                      View
-                    </button>
-                    <button
-                      onClick={() => handleEditSession(session)}
-                      className="flex-1 bg-blue-500 text-white py-2 px-3 rounded-lg hover:bg-blue-600 transition-all duration-300 smooth-hover text-sm font-medium"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDeleteSession(session)}
-                      className="flex-1 bg-red-500 text-white py-2 px-3 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover text-sm font-medium"
-                    >
-                      <Trash2 className="h-3 w-3 mr-1 inline" />
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Events Tab */}
-        {activeTab === "events" && (
-          <div className="fade-in-blur">
-            <div className="mb-6">
-              <h2 className="text-xl font-bold text-gray-900 flex items-center mb-4 fade-in-blur">
-                <Calendar className="h-5 w-5 mr-2 text-orange-600" /> Events Management
-              </h2>
-
-              <div className="flex space-x-1 mb-4 fade-in-blur">
-                {[1, 2, 3, 4, 5].map((day) => (
-                  <button
-                    key={day}
-                    onClick={() => setActiveDay(day)}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover min-w-20 ${
-                      activeDay === day 
-                        ? "bg-orange-500 text-white" 
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    }`}
-                  >
-                    Day {day}<br />
-                    <span className="text-xs">{getDateForDay(day).split(',')[0]}</span>
-                  </button>
-                ))}
+                  <Plus className="h-4 w-4 mr-2" />
+                  <span className="text-sm sm:text-base">Add Company</span>
+                </button>
               </div>
-              
-              <button
-                onClick={() => setEventModal(true)}
-                className="w-full sm:w-auto flex items-center justify-center px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-all duration-300 smooth-hover fade-in-blur"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Event
-              </button>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 stagger-children">
-              {events.map((event) => (
-                <div key={event.id} className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover smooth-hover">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{event.title}</h3>
-                  <p className="text-sm text-gray-600 mb-3">{event.description}</p>
-                  <div className="space-y-1 text-xs text-gray-500 mb-4">
-                    <div className="flex items-center">
-                      <Clock className="h-3 w-3 mr-1" />
-                      {new Date(event.start_time).toLocaleDateString()} {new Date(event.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </div>
-                    <div className="flex items-center">
-                      <MapPin className="h-3 w-3 mr-1" />
-                      {event.location}
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-xs px-2 py-1 bg-purple-100 text-purple-800 rounded-full">
-                      {event.item_type}
-                    </span>
-                  </div>
+              <div className="space-y-6 sm:space-y-8">
+                {PARTNER_TYPES.map((partnerType) => {
+                  const partnerCompanies = companies.filter(company => 
+                    company.partner_type === partnerType
+                  );
                   
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleEventClick(event)}
-                      className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover text-sm font-medium"
-                    >
-                      <Eye className="h-3 w-3 mr-1 inline" />
-                      View
-                    </button>
-                    <button
-                      onClick={() => handleEditEvent(event)}
-                      className="flex-1 bg-green-500 text-white py-2 px-3 rounded-lg hover:bg-green-600 transition-all duration-300 smooth-hover text-sm font-medium"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDeleteEvent(event)}
-                      className="flex-1 bg-red-500 text-white py-2 px-3 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover text-sm font-medium"
-                    >
-                      <Trash2 className="h-3 w-3 mr-1 inline" />
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+                  if (partnerCompanies.length === 0) return null;
+                  
+                  return (
+                    <div key={partnerType} className="fade-in-blur">
+                      <h3 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+                        {partnerType}
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 stagger-children">
+                        {partnerCompanies.map((company) => (
+                          <div 
+                            key={company.id} 
+                            className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 hover:shadow-md transition-all duration-300 smooth-hover card-hover fade-in-blur"
+                          >
+                            <div className="text-center">
+                              <img 
+                                src={company.logo_url} 
+                                alt={`${company.name} logo`} 
+                                className="h-12 sm:h-16 w-auto mx-auto mb-3 sm:mb-4 object-contain"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/64x64/orange/white?text=Logo";
+                                }}
+                              />
+                              <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-2">{company.name}</h3>
+                              
+                              {/* Partner Type Badge */}
+                              {company.partner_type && (
+                                <div className="inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 mb-2">
+                                  {company.partner_type}
+                                </div>
+                              )}
+                              
+                              {company.booth_number && (
+                                <div className="inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 mb-3 sm:mb-4 ml-1 sm:ml-2">
+                                  Booth {company.booth_number}
+                                </div>
+                              )}
 
-        {/* Maps Tab */}
-        {activeTab === "maps" && (
-          <div className="fade-in-blur">
-            <div className="mb-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4 fade-in-blur">Event Maps</h2>
-              
-              <div className="flex space-x-2 mb-4 fade-in-blur">
-                {[1, 2, 3, 4, 5].map((day) => (
-                  <button
-                    key={day}
-                    onClick={() => setActiveDay(day)}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
-                      activeDay === day 
-                        ? "bg-orange-500 text-white" 
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    }`}
-                  >
-                    Day {day}
-                  </button>
-                ))}
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-xl shadow-sm border p-4 flex justify-center items-center min-h-[400px] fade-in-blur card-hover">
-              {mapLoading && (
-                <div className="flex flex-col items-center justify-center fade-in-blur">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mb-2"></div>
-                  <p className="text-gray-500 text-sm">Loading map...</p>
-                </div>
-              )}
-              <img
-                src={mapImages[activeDay - 1]}
-                alt={`Day ${activeDay} Map`}
-                className={`max-w-full h-auto rounded-lg transition-opacity duration-200 ${mapLoading ? 'opacity-0 absolute' : 'opacity-100'}`}
-                onLoad={handleMapLoad}
-                onError={(e) => {
-                  handleMapError();
-                  (e.currentTarget as HTMLImageElement).src = "/src/Assets/placeholder-map.png";
-                }}
-              />
-            </div>
-          </div>
-        )}
+                              {/* Academic Faculties */}
+                              {company.academic_faculties_seeking_for && company.academic_faculties_seeking_for.length > 0 && (
+                                <div className="mb-2">
+                                  <div className="flex items-center text-xs text-gray-600 mb-1">
+                                    <BookOpen className="h-3 w-3 mr-1" />
+                                    <span className="font-medium">Faculties:</span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {company.academic_faculties_seeking_for.slice(0, 2).map((faculty, index) => (
+                                      <span key={index} className="text-xs bg-blue-100 text-blue-800 px-1 py-0.5 rounded">
+                                        {faculty.split(' ').pop()}
+                                      </span>
+                                    ))}
+                                    {company.academic_faculties_seeking_for.length > 2 && (
+                                      <span className="text-xs bg-blue-100 text-blue-800 px-1 py-0.5 rounded">
+                                        +{company.academic_faculties_seeking_for.length - 2}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
 
-        {/* Companies Tab */}
-        {activeTab === "companies" && (
-          <div className="fade-in-blur">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-gray-900 flex items-center mb-4 sm:mb-0 fade-in-blur">
-                <Building className="h-5 w-5 mr-2 text-orange-600" /> Companies Management
-              </h2>
-              <button
-                onClick={() => setCompanyModal(true)}
-                className="flex items-center px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all duration-300 smooth-hover fade-in-blur"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Company
-              </button>
-            </div>
-
-            <div className="space-y-8">
-              {PARTNER_TYPES.map((partnerType) => {
-                const partnerCompanies = companies.filter(company => 
-                  company.partner_type === partnerType
-                );
-                
-                if (partnerCompanies.length === 0) return null;
-                
-                return (
-                  <div key={partnerType} className="fade-in-blur">
-                    <h3 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b border-gray-200">
-                      {partnerType}
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 stagger-children">
-                      {partnerCompanies.map((company) => (
-                        <div 
-                          key={company.id} 
-                          className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 hover:shadow-md transition-all duration-300 smooth-hover card-hover fade-in-blur"
-                        >
-                          <div className="text-center">
-                            <img 
-                              src={company.logo_url} 
-                              alt={`${company.name} logo`} 
-                              className="h-16 w-auto mx-auto mb-4 object-contain"
-                              onError={(e) => {
-                                (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/64x64/orange/white?text=Logo";
-                              }}
-                            />
-                            <h3 className="text-lg font-bold text-gray-900 mb-2">{company.name}</h3>
-                            <p className="text-sm text-gray-600 mb-3 line-clamp-3">{company.description}</p>
-                            
-                            {/* Partner Type Badge */}
-                            {company.partner_type && (
-                              <div className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 mb-2">
-                                {company.partner_type}
+                              {/* Vacancies Type */}
+                              {company.vacancies_type && company.vacancies_type.length > 0 && (
+                                <div className="mb-3 sm:mb-4">
+                                  <div className="flex items-center text-xs text-gray-600 mb-1">
+                                    <Briefcase className="h-3 w-3 mr-1" />
+                                    <span className="font-medium">Vacancies:</span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {company.vacancies_type.slice(0, 3).map((type, index) => (
+                                      <span key={index} className="text-xs bg-green-100 text-green-800 px-1 py-0.5 rounded">
+                                        {type}
+                                      </span>
+                                    ))}
+                                    {company.vacancies_type.length > 3 && (
+                                      <span className="text-xs bg-green-100 text-green-800 px-1 py-0.5 rounded">
+                                        +{company.vacancies_type.length - 3}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              <div className="flex gap-2 mt-3 sm:mt-4">
+                                <button
+                                  onClick={() => handleCompanyClick(company)}
+                                  className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+                                >
+                                  <Eye className="h-3 w-3 mr-1 inline" />
+                                  View
+                                </button>
+                                <button
+                                  onClick={() => handleEditCompany(company)}
+                                  className="flex-1 bg-orange-500 text-white py-2 px-3 rounded-lg hover:bg-orange-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => openDeleteCompanyModal(company)}
+                                  className="flex-1 bg-red-500 text-white py-2 px-3 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+                                >
+                                  <Trash2 className="h-3 w-3 mr-1 inline" />
+                                  Delete
+                                </button>
                               </div>
-                            )}
-                            
-                            {company.booth_number && (
-                              <div className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 mb-4">
-                                Booth {company.booth_number}
-                              </div>
-                            )}
-                            
-                            <div className="flex gap-2 mt-4">
-                              <button
-                                onClick={() => handleCompanyClick(company)}
-                                className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover text-sm font-medium"
-                              >
-                                <Eye className="h-3 w-3 mr-1 inline" />
-                                View
-                              </button>
-                              <button
-                                onClick={() => handleEditCompany(company)}
-                                className="flex-1 bg-orange-500 text-white py-2 px-3 rounded-lg hover:bg-orange-600 transition-all duration-300 smooth-hover text-sm font-medium"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => openDeleteCompanyModal(company)}
-                                className="flex-1 bg-red-500 text-white py-2 px-3 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover text-sm font-medium"
-                              >
-                                <Trash2 className="h-3 w-3 mr-1 inline" />
-                                Delete
-                              </button>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
+                  );
+                })}
+                
+                {/* Fallback if no companies found */}
+                {companies.length === 0 && (
+                  <div className="text-center py-8 sm:py-12 bg-white rounded-lg border border-gray-200">
+                    <Building className="h-8 w-8 sm:h-12 sm:w-12 text-gray-300 mx-auto mb-3 sm:mb-4" />
+                    <p className="text-gray-500 text-sm sm:text-base">No companies available</p>
                   </div>
-                );
-              })}
-              
-              {/* Fallback if no companies found */}
-              {companies.length === 0 && (
-                <div className="text-center py-8 sm:py-12 bg-white rounded-lg border border-gray-200">
-                  <Building className="h-8 w-8 sm:h-12 sm:w-12 text-gray-300 mx-auto mb-3 sm:mb-4" />
-                  <p className="text-gray-500 text-sm sm:text-base">No companies available</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Open Recruitment Days Tab - Responsive */}
+          {activeTab === "open-recruitment" && (
+            <div className="fade-in-blur">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6">
+                <h2 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center mb-4 sm:mb-0 fade-in-blur">
+                  <Calendar className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-orange-600" /> Open Recruitment Days
+                </h2>
+                
+                {/* Day Selector */}
+                <div className="flex space-x-1 sm:space-x-2 mb-4 sm:mb-0 fade-in-blur overflow-x-auto pb-2">
+                  <button
+                    onClick={() => setOpenRecruitmentDay(4)}
+                    className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover flex-shrink-0 ${
+                      openRecruitmentDay === 4 
+                        ? "bg-orange-500 text-white" 
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    Day 4 (22-10-2025)
+                  </button>
+                  <button
+                    onClick={() => setOpenRecruitmentDay(5)}
+                    className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover flex-shrink-0 ${
+                      openRecruitmentDay === 5 
+                        ? "bg-orange-500 text-white" 
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    Day 5 (23-10-2025)
+                  </button>
+                </div>
+              </div>
+
+              {loading ? (
+                <div className="flex items-center justify-center h-32 fade-in-blur">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 stagger-children">
+                  {(openRecruitmentDay === 4 ? day4Bookings : day5Bookings).map((booking) => (
+                    <div 
+                      key={booking.id} 
+                      onClick={() => handleBookingClick(booking)}
+                      className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 hover:shadow-md transition-all duration-300 smooth-hover card-hover fade-in-blur cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                            <User className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-gray-900 text-sm sm:text-base">
+                              {booking.user?.first_name} {booking.user?.last_name}
+                            </h3>
+                            <p className="text-xs sm:text-sm text-gray-500">{booking.user?.personal_id}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 text-xs sm:text-sm text-gray-600">
+                        <div className="flex items-center">
+                          <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+                          <span>Booked: {new Date(booking.scanned_at).toLocaleDateString()}</span>
+                        </div>
+                        <div className="flex items-center">
+                          <Clock className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+                          <span>{new Date(booking.scanned_at).toLocaleTimeString()}</span>
+                        </div>
+                        {booking.session && (
+                          <div className="flex items-center">
+                            <BookOpen className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+                            <span className="font-medium text-xs sm:text-sm">{booking.session.title}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2 mt-4">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleBookingClick(booking);
+                          }}
+                          className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+                        >
+                          <Eye className="h-3 w-3 mr-1 inline" />
+                          View
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDeleteBookingModal(booking);
+                          }}
+                          className="flex-1 bg-red-500 text-white py-2 px-3 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+                        >
+                          <Trash2 className="h-3 w-3 mr-1 inline" />
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {(openRecruitmentDay === 4 ? day4Bookings : day5Bookings).length === 0 && !loading && (
+                <div className="text-center py-8 sm:py-12 bg-white rounded-xl border border-gray-200 fade-in-blur">
+                  <Calendar className="h-12 w-12 sm:h-16 sm:w-16 text-gray-300 mx-auto mb-3 sm:mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No Bookings Found</h3>
+                  <p className="text-gray-500 text-sm sm:text-base">
+                    No session bookings found for Day {openRecruitmentDay} ({openRecruitmentDay === 4 ? '22-10-2025' : '23-10-2025'})
+                  </p>
                 </div>
               )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
-
-        {/* All Modals with createPortal and animations */}
 
 {/* Company Detail Modal */}
 {companyDetailModal && selectedCompanyDetail && createPortal(
   <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
-      <div className="p-6 stagger-children">
-        <div className="flex items-center justify-between mb-6 fade-in-blur">
-          <h2 className="text-xl font-bold text-gray-900">Company Details</h2>
+      <div className="p-4 sm:p-6 stagger-children">
+        <div className="flex items-center justify-between mb-4 sm:mb-6 fade-in-blur">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900">Company Details</h2>
           <button
             onClick={() => {
               setCompanyDetailModal(false);
@@ -2862,51 +3401,76 @@ export function AdminPanel() {
             }}
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >
-            <X className="h-6 w-6" />
+            <X className="h-5 w-5 sm:h-6 sm:w-6" />
           </button>
         </div>
 
-        <div className="space-y-6 fade-in-blur">
+        <div className="space-y-4 sm:space-y-6 fade-in-blur">
           {/* Company Logo and Name */}
           <div className="text-center">
             <img 
               src={selectedCompanyDetail.logo_url} 
               alt={`${selectedCompanyDetail.name} logo`} 
-              className="h-24 w-auto mx-auto mb-4 object-contain"
+              className="h-16 sm:h-24 w-auto mx-auto mb-3 sm:mb-4 object-contain"
               onError={(e) => {
                 (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/96x96/orange/white?text=Logo";
               }}
             />
-            <h3 className="text-2xl font-bold text-gray-900">{selectedCompanyDetail.name}</h3>
+            <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{selectedCompanyDetail.name}</h3>
             
             {/* Partner Type Badge */}
             {selectedCompanyDetail.partner_type && (
-              <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800 mt-2">
+              <div className="inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium bg-purple-100 text-purple-800 mt-2">
                 {selectedCompanyDetail.partner_type}
               </div>
             )}
             
             {selectedCompanyDetail.booth_number && (
-              <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-100 text-orange-800 mt-2 ml-2">
-                <MapPin className="h-4 w-4 mr-1" />
+              <div className="inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium bg-orange-100 text-orange-800 mt-2 ml-1 sm:ml-2">
+                <MapPin className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                 Booth {selectedCompanyDetail.booth_number}
               </div>
             )}
           </div>
 
-          {selectedCompanyDetail.partner_type && (
-  <div className="fade-in-blur">
-    <label className="block text-sm font-medium text-gray-700 mb-2">Partner Type</label>
-    <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
-      {selectedCompanyDetail.partner_type}
-    </div>
-  </div>
-)}
+          {/* Academic Faculties */}
+          {selectedCompanyDetail.academic_faculties_seeking_for && selectedCompanyDetail.academic_faculties_seeking_for.length > 0 && (
+            <div className="fade-in-blur">
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                <BookOpen className="h-4 w-4 mr-2" />
+                Academic Faculties Seeking For
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {selectedCompanyDetail.academic_faculties_seeking_for.map((faculty, index) => (
+                  <span key={index} className="inline-flex items-center px-2 sm:px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs sm:text-sm">
+                    {faculty}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Vacancies Type */}
+          {selectedCompanyDetail.vacancies_type && selectedCompanyDetail.vacancies_type.length > 0 && (
+            <div className="fade-in-blur">
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                <Briefcase className="h-4 w-4 mr-2" />
+                Vacancies Type
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {selectedCompanyDetail.vacancies_type.map((type, index) => (
+                  <span key={index} className="inline-flex items-center px-2 sm:px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs sm:text-sm">
+                    {type}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Company Description */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">About Company</label>
-            <p className="text-gray-700 leading-relaxed">
+            <p className="text-gray-700 leading-relaxed text-sm sm:text-base">
               {selectedCompanyDetail.description || "No description available."}
             </p>
           </div>
@@ -2919,21 +3483,21 @@ export function AdminPanel() {
                 href={selectedCompanyDetail.website} 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="text-orange-600 hover:text-orange-700 break-all transition-colors"
+                className="text-orange-600 hover:text-orange-700 break-all text-sm sm:text-base"
               >
                 {selectedCompanyDetail.website}
               </a>
             ) : (
-              <p className="text-gray-500">No website provided</p>
+              <p className="text-gray-500 text-sm sm:text-base">No website provided</p>
             )}
           </div>
 
           {/* Additional Information */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
             {/* Created Date */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Added On</label>
-              <p className="text-gray-900 text-sm">
+              <p className="text-gray-900 text-xs sm:text-sm">
                 {selectedCompanyDetail.created_at 
                   ? new Date(selectedCompanyDetail.created_at).toLocaleDateString()
                   : 'Unknown'
@@ -2944,7 +3508,7 @@ export function AdminPanel() {
             {/* Company ID */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Company ID</label>
-              <p className="text-gray-900 text-sm font-mono truncate">
+              <p className="text-gray-900 text-xs sm:text-sm font-mono truncate">
                 {selectedCompanyDetail.id}
               </p>
             </div>
@@ -2955,7 +3519,7 @@ export function AdminPanel() {
             {selectedCompanyDetail.website && (
               <button
                 onClick={() => window.open(selectedCompanyDetail.website, "_blank")}
-                className="w-full bg-orange-500 text-white py-3 px-4 rounded-lg hover:bg-orange-600 transition-all duration-300 smooth-hover font-medium flex items-center justify-center"
+                className="w-full bg-orange-500 text-white py-2 sm:py-3 px-4 rounded-lg hover:bg-orange-600 transition-all duration-300 smooth-hover font-medium flex items-center justify-center text-sm sm:text-base"
               >
                 <Link className="h-4 w-4 mr-2" />
                 Visit Career Page
@@ -2968,7 +3532,7 @@ export function AdminPanel() {
                   handleEditCompany(selectedCompanyDetail);
                   setCompanyDetailModal(false);
                 }}
-                className="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-all duration-300 smooth-hover font-medium"
+                className="bg-blue-500 text-white py-2 px-3 sm:px-4 rounded-lg hover:bg-blue-600 transition-all duration-300 smooth-hover font-medium text-xs sm:text-sm"
               >
                 Edit Company
               </button>
@@ -2978,7 +3542,7 @@ export function AdminPanel() {
                   setCompanyDetailModal(false);
                   openDeleteCompanyModal(selectedCompanyDetail);
                 }}
-                className="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover font-medium"
+                className="bg-red-500 text-white py-2 px-3 sm:px-4 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover font-medium text-xs sm:text-sm"
               >
                 Delete Company
               </button>
@@ -2989,7 +3553,7 @@ export function AdminPanel() {
                 setCompanyDetailModal(false);
                 setSelectedCompanyDetail(null);
               }}
-              className="w-full bg-gray-100 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover font-medium"
+              className="w-full bg-gray-100 text-gray-700 py-2 sm:py-3 px-4 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover font-medium text-sm sm:text-base"
             >
               Close Details
             </button>
@@ -3001,976 +3565,172 @@ export function AdminPanel() {
   document.body
 )}
 
-        {/* Session Modal */}
-        {sessionModal && createPortal(
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
-            <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
-              <h3 className="text-2xl font-bold mb-4 fade-in-blur">Add Session</h3>
-              <div className="space-y-4 stagger-children">
-                <input
-                  type="text"
-                  value={newSession.title}
-                  onChange={(e) => setNewSession({ ...newSession, title: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                  placeholder="Session Title *"
-                />
-                
-                <textarea
-                  value={newSession.description}
-                  onChange={(e) => setNewSession({ ...newSession, description: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                  placeholder="Session Description"
-                  rows={3}
-                />
-
-                <select
-                  value={newSession.type}
-                  onChange={(e) => setNewSession({ ...newSession, type: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                >
-                  <option value="session">Session</option>
-                  <option value="mentorship">Mentorship</option>
-                </select>
-
-                <input
-                  type="time"
-                  value={newSession.hour}
-                  onChange={(e) => setNewSession({ ...newSession, hour: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                />
-
-                <input
-                  type="date"
-                  value={newSession.date}
-                  onChange={(e) => setNewSession({ ...newSession, date: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                />
-
-                <input
-                  type="text"
-                  value={newSession.speaker}
-                  onChange={(e) => setNewSession({ ...newSession, speaker: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                  placeholder="Speaker *"
-                />
-
-                <input
-                  type="number"
-                  value={newSession.capacity}
-                  onChange={(e) => setNewSession({ ...newSession, capacity: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                  placeholder="Capacity"
-                />
-
-                <input
-                  type="text"
-                  value={newSession.location}
-                  onChange={(e) => setNewSession({ ...newSession, location: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                  placeholder="Session Location *"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
-                <button
-                  onClick={() => setSessionModal(false)}
-                  className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSessionSubmit}
-                  disabled={loading}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-all duration-300 smooth-hover"
-                >
-                  {loading ? 'Adding...' : 'Save Session'}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
-
-        {/* Event Modal */}
-        {eventModal && createPortal(
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
-            <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
-              <h3 className="text-2xl font-bold mb-4 fade-in-blur">Add Event</h3>
-              <div className="space-y-4 stagger-children">
-                <input
-                  type="text"
-                  value={newEvent.title}
-                  onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-300"
-                  placeholder="Event Title *"
-                />
-                
-                <textarea
-                  value={newEvent.description}
-                  onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-300"
-                  placeholder="Event Description"
-                  rows={3}
-                />
-
-                <select
-                  value={newEvent.type}
-                  onChange={(e) => setNewEvent({ ...newEvent, type: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-300"
-                >
-                  <option value="general">General</option>
-                  <option value="workshop">Workshop</option>
-                  <option value="networking">Networking</option>
-                  <option value="keynote">Keynote</option>
-                  <option value="panel">Panel</option>
-                </select>
-
-                <div className="grid grid-cols-2 gap-3 fade-in-blur">
-                  <input
-                    type="date"
-                    value={newEvent.startDate}
-                    onChange={(e) => setNewEvent({ ...newEvent, startDate: e.target.value })}
-                    className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-300"
-                    placeholder="Start Date *"
-                  />
-                  <input
-                    type="time"
-                    value={newEvent.startTime}
-                    onChange={(e) => setNewEvent({ ...newEvent, startTime: e.target.value })}
-                    className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-300"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 fade-in-blur">
-                  <input
-                    type="date"
-                    value={newEvent.endDate}
-                    onChange={(e) => setNewEvent({ ...newEvent, endDate: e.target.value })}
-                    className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-300"
-                    placeholder="End Date (Optional)"
-                  />
-                  <input
-                    type="time"
-                    value={newEvent.endTime}
-                    onChange={(e) => setNewEvent({ ...newEvent, endTime: e.target.value })}
-                    className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-300"
-                  />
-                </div>
-
-                <input
-                  type="text"
-                  value={newEvent.location}
-                  onChange={(e) => setNewEvent({ ...newEvent, location: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-300"
-                  placeholder="Event Location"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
-                <button
-                  onClick={() => setEventModal(false)}
-                  className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleEventSubmit}
-                  disabled={loading}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-all duration-300 smooth-hover"
-                >
-                  {loading ? 'Adding...' : 'Save Event'}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
-
-        {/* Map Upload Modal */}
-        {mapModal && createPortal(
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
-            <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md modal-content-blur fade-in-up-blur">
-              <h3 className="text-2xl font-bold mb-4 fade-in-blur">Modify Map</h3>
-              <div className="space-y-4 stagger-children">
-                <div className="fade-in-blur">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Day</label>
-                  <select
-                    value={mapForm.day}
-                    onChange={(e) => setMapForm({ ...mapForm, day: parseInt(e.target.value) })}
-                    className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-300"
-                  >
-                    {[1, 2, 3, 4, 5].map(day => (
-                      <option key={day} value={day}>Day {day}</option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div className="fade-in-blur">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Upload New Map Image</label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => setMapForm({ ...mapForm, image: e.target.files?.[0] || null })}
-                    className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-300"
-                  />
-                  
-                  {mapForm.image && (
-                    <div className="mt-3 p-3 bg-gray-50 rounded-lg fade-in-blur">
-                      <p className="text-sm text-gray-600 mb-2">Preview:</p>
-                      <img 
-                        src={URL.createObjectURL(mapForm.image)} 
-                        alt="Map preview" 
-                        className="max-w-full h-32 object-contain mx-auto rounded"
-                      />
-                      <p className="text-xs text-gray-500 mt-1 text-center">
-                        {mapForm.image.name} ({Math.round(mapForm.image.size / 1024)}KB)
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
-                <button
-                  onClick={() => setMapModal(false)}
-                  className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleMapUpload}
-                  disabled={loading || !mapForm.image}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-all duration-300 smooth-hover"
-                >
-                  {loading ? 'Uploading...' : 'Update Map'}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
-
-        {/* Announcement Modal */}
-        {announcementModal && createPortal(
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
-            <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
-              <div className="flex items-center justify-between mb-6 fade-in-blur">
-                <h3 className="text-2xl font-bold text-gray-900">Send Announcement</h3>
-                <button
-                  onClick={() => {
-                    setAnnouncementModal(false);
-                    clearUserSelection();
-                    setTeamLeaderOfRole("");
-                  }}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <X className="h-6 w-6" />
-                </button>
-              </div>
-
-              <div className="space-y-4 stagger-children">
-                <div className="fade-in-blur">
-                  <input
-                    type="text"
-                    value={announcementTitle}
-                    onChange={(e) => setAnnouncementTitle(e.target.value)}
-                    className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-300"
-                    placeholder="Message Title *"
-                  />
-                </div>
-
-                <div className="fade-in-blur">
-                  <textarea
-                    value={announcementDescription}
-                    onChange={(e) => setAnnouncementDescription(e.target.value)}
-                    className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-300"
-                    placeholder="Message Description *"
-                    rows={3}
-                  />
-                </div>
-
-                <div className="fade-in-blur">
-                  <select
-                    value={announcementRole}
-                    onChange={(e) => {
-                      setAnnouncementRole(e.target.value);
-                      setTeamLeaderOfRole("");
-                      if (e.target.value !== "custom") {
-                        clearUserSelection();
-                      }
-                    }}
-                    className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-300"
-                  >
-                    {getAdminRoleOptions().map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Team Leader Of Selection */}
-                {announcementRole === "team_leader" && (
-                  <div className="space-y-2 fade-in-blur">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Team Leader Of
-                    </label>
-                    <select
-                      value={teamLeaderOfRole}
-                      onChange={(e) => setTeamLeaderOfRole(e.target.value)}
-                      className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                    >
-                      <option value="">Select which team leaders...</option>
-                      {getTeamLeaderOfOptions().map(option => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-gray-500">
-                      {teamLeaderOfRole === "all" 
-                        ? "Will send to all team leaders regardless of their assigned team"
-                        : `Will send only to team leaders of ${teamLeaderOfRole} team`}
-                    </p>
-                  </div>
-                )}
-
-                {/* Custom Selection UI */}
-                {announcementRole === "custom" && (
-                  <div className="space-y-3 fade-in-blur">
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={userSearch}
-                        onChange={(e) => {
-                          setUserSearch(e.target.value);
-                          searchUsersByPersonalId(e.target.value);
-                        }}
-                        placeholder="Search by Personal ID or Volunteer ID..."
-                        className="w-full border rounded-lg p-2 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                      />
-                      {searchLoading && (
-                        <div className="absolute right-3 top-3">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-                        </div>
-                      )}
-                    </div>
-
-                    {searchResults.length > 0 && (
-                      <div className="max-h-40 overflow-y-auto border rounded-lg fade-in-blur">
-                        {searchResults.map((user) => (
-                          <div
-                            key={user.id}
-                            onClick={() => addUserToSelection(user)}
-                            className="p-3 hover:bg-gray-50 cursor-pointer border-b last:border-b-0 transition-all duration-300 smooth-hover"
-                          >
-                            <div className="flex justify-between items-center">
-                              <div>
-                                <p className="text-sm font-medium text-gray-900">
-                                  {user.first_name} {user.last_name}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                  {user.volunteer_id ? `Vol ID: ${user.volunteer_id} | ` : ''}
-                                  Personal ID: {user.personal_id}
-                                </p>
-                                <p className="text-xs text-gray-500 capitalize">
-                                  {user.role?.replace('_', ' ') || 'No role'}
-                                </p>
-                              </div>
-                              <Plus className="h-4 w-4 text-blue-500" />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {selectedUsers.length > 0 && (
-                      <div className="fade-in-blur">
-                        <div className="flex justify-between items-center mb-2">
-                          <label className="text-sm font-medium text-gray-700">
-                            Selected Users ({selectedUsers.length})
-                          </label>
-                          <button
-                            onClick={clearUserSelection}
-                            className="text-xs text-red-500 hover:text-red-700 transition-colors"
-                          >
-                            Clear All
-                          </button>
-                        </div>
-                        <div className="max-h-32 overflow-y-auto border rounded-lg bg-gray-50">
-                          {(searchResults as UserProfileItem[]).filter(u => selectedUsers.includes(u.id)).map((user) => (
-                            <div
-                              key={user.id}
-                              className="p-2 flex justify-between items-center border-b last:border-b-0"
-                            >
-                              <div>
-                                <p className="text-sm text-gray-900">
-                                  {user.first_name} {user.last_name}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                  ID: {user.personal_id} | {user.role}
-                                </p>
-                              </div>
-                              <button
-                                onClick={() => removeUserFromSelection(user.id)}
-                                className="text-red-500 hover:text-red-700 transition-colors"
-                              >
-                                <X className="h-4 w-4" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
-                <button
-                  onClick={() => {
-                    setAnnouncementModal(false);
-                    clearUserSelection();
-                    setTeamLeaderOfRole("");
-                  }}
-                  className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleAnnouncementSubmit}
-                  disabled={loading || (announcementRole === "team_leader" && !teamLeaderOfRole)}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-all duration-300 smooth-hover"
-                >
-                  {loading ? 'Sending...' : 'Send Announcement'}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
-
-        {/* Session Detail Modal */}
-        {sessionDetailModal && selectedSessionDetail && createPortal(
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
-              <div className="p-6 stagger-children">
-                <div className="flex items-center justify-between mb-6 fade-in-blur">
-                  <h2 className="text-xl font-bold text-gray-900">Session Details</h2>
-                  <button
-                    onClick={() => {
-                      setSessionDetailModal(false);
-                      setSelectedSessionDetail(null);
-                    }}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    <X className="h-6 w-6" />
-                  </button>
-                </div>
-
-                <div className="space-y-6 fade-in-blur">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">{selectedSessionDetail.title}</h3>
-                    <p className="text-gray-600 mt-2">{selectedSessionDetail.description}</p>
-                  </div>
-
-                  {selectedSessionDetail.speaker && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Speaker</label>
-                      <p className="text-gray-900">{selectedSessionDetail.speaker}</p>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Date & Time</label>
-                    <p className="text-gray-900">
-                      {new Date(selectedSessionDetail.start_time).toLocaleDateString()} at{' '}
-                      {new Date(selectedSessionDetail.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </p>
-                    {selectedSessionDetail.end_time && (
-                      <p className="text-gray-500 text-sm">
-                        Ends at {new Date(selectedSessionDetail.end_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Location</label>
-                    <p className="text-gray-900">{selectedSessionDetail.location}</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Type</label>
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                      {selectedSessionDetail.session_type}
-                    </span>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Capacity</label>
-                    <p className="text-gray-900">
-                      {selectedSessionDetail.current_bookings || 0} / {selectedSessionDetail.capacity || 'Unlimited'} booked
-                    </p>
-                  </div>
-
-                  <div className="pt-4 border-t border-gray-200 fade-in-blur">
-                    <button
-                      onClick={() => setSessionDetailModal(false)}
-                      className="w-full bg-orange-500 text-white py-3 px-4 rounded-lg hover:bg-orange-600 transition-all duration-300 smooth-hover font-medium"
-                    >
-                      Close Details
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
-
-        {/* Company Detail Modal */}
-        {companyDetailModal && selectedCompanyDetail && createPortal(
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
-              <div className="p-6 stagger-children">
-                <div className="flex items-center justify-between mb-6 fade-in-blur">
-                  <h2 className="text-xl font-bold text-gray-900">Company Details</h2>
-                  <button
-                    onClick={() => {
-                      setCompanyDetailModal(false);
-                      setSelectedCompanyDetail(null);
-                    }}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    <X className="h-6 w-6" />
-                  </button>
-                </div>
-
-                <div className="space-y-6 fade-in-blur">
-                  <div className="text-center">
-                    <img 
-                      src={selectedCompanyDetail.logo_url} 
-                      alt={`${selectedCompanyDetail.name} logo`} 
-                      className="h-24 w-auto mx-auto mb-4 object-contain"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/96x96/orange/white?text=Logo";
-                      }}
-                    />
-                    <h3 className="text-2xl font-bold text-gray-900">{selectedCompanyDetail.name}</h3>
-                    {selectedCompanyDetail.booth_number && (
-                      <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-100 text-orange-800 mt-2">
-                        <MapPin className="h-4 w-4 mr-1" />
-                        Booth {selectedCompanyDetail.booth_number}
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">About Company</label>
-                    <p className="text-gray-700 leading-relaxed">{selectedCompanyDetail.description}</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Website</label>
-                    <a 
-                      href={selectedCompanyDetail.website} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-orange-600 hover:text-orange-700 break-all transition-colors"
-                    >
-                      {selectedCompanyDetail.website}
-                    </a>
-                  </div>
-
-                  <div className="pt-4 space-y-3 fade-in-blur">
-                    <button
-                      onClick={() => window.open(selectedCompanyDetail.website, "_blank")}
-                      className="w-full bg-orange-500 text-white py-3 px-4 rounded-lg hover:bg-orange-600 transition-all duration-300 smooth-hover font-medium"
-                    >
-                      Visit Career Page
-                    </button>
-                    
-                    <button
-                      onClick={() => {
-                        setCompanyDetailModal(false);
-                        setSelectedCompanyDetail(null);
-                      }}
-                      className="w-full bg-gray-100 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover font-medium"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
-
-        {/* Edit Session Modal */}
-        {editSessionModal && createPortal(
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
-            <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
-              <h3 className="text-2xl font-bold mb-4 fade-in-blur">Edit Session</h3>
-              <div className="space-y-4 stagger-children">
-                <input
-                  type="text"
-                  value={editSession.title}
-                  onChange={(e) => setEditSession({ ...editSession, title: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                  placeholder="Session Title *"
-                />
-                
-                <textarea
-                  value={editSession.description}
-                  onChange={(e) => setEditSession({ ...editSession, description: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                  placeholder="Session Description"
-                  rows={3}
-                />
-
-                <select
-                  value={editSession.type}
-                  onChange={(e) => setEditSession({ ...editSession, type: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                >
-                  <option value="session">Session</option>
-                  <option value="mentorship">Mentorship</option>
-                </select>
-
-                <input
-                  type="time"
-                  value={editSession.hour}
-                  onChange={(e) => setEditSession({ ...editSession, hour: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                />
-
-                <input
-                  type="date"
-                  value={editSession.date}
-                  onChange={(e) => setEditSession({ ...editSession, date: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                />
-
-                <input
-                  type="text"
-                  value={editSession.speaker}
-                  onChange={(e) => setEditSession({ ...editSession, speaker: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                  placeholder="Speaker *"
-                />
-
-                <input
-                  type="number"
-                  value={editSession.capacity}
-                  onChange={(e) => setEditSession({ ...editSession, capacity: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                  placeholder="Capacity"
-                />
-
-                <input
-                  type="text"
-                  value={editSession.location}
-                  onChange={(e) => setEditSession({ ...editSession, location: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                  placeholder="Session Location *"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
-                <button
-                  onClick={() => setEditSessionModal(false)}
-                  className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSessionUpdate}
-                  disabled={loading}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-all duration-300 smooth-hover"
-                >
-                  {loading ? 'Updating...' : 'Update Session'}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
-
-        {/* Edit Event Modal */}
-        {editEventModal && createPortal(
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
-            <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
-              <h3 className="text-2xl font-bold mb-4 fade-in-blur">Edit Event</h3>
-              <div className="space-y-4 stagger-children">
-                <input
-                  type="text"
-                  value={editEvent.title}
-                  onChange={(e) => setEditEvent({ ...editEvent, title: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-300"
-                  placeholder="Event Title *"
-                />
-                
-                <textarea
-                  value={editEvent.description}
-                  onChange={(e) => setEditEvent({ ...editEvent, description: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-300"
-                  placeholder="Event Description"
-                  rows={3}
-                />
-
-                <select
-                  value={editEvent.type}
-                  onChange={(e) => setEditEvent({ ...editEvent, type: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-300"
-                >
-                  <option value="general">General</option>
-                  <option value="workshop">Workshop</option>
-                  <option value="networking">Networking</option>
-                  <option value="keynote">Keynote</option>
-                  <option value="panel">Panel</option>
-                </select>
-
-                <div className="grid grid-cols-2 gap-3 fade-in-blur">
-                  <input
-                    type="date"
-                    value={editEvent.startDate}
-                    onChange={(e) => setEditEvent({ ...editEvent, startDate: e.target.value })}
-                    className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-300"
-                    placeholder="Start Date *"
-                  />
-                  <input
-                    type="time"
-                    value={editEvent.startTime}
-                    onChange={(e) => setEditEvent({ ...editEvent, startTime: e.target.value })}
-                    className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-300"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 fade-in-blur">
-                  <input
-                    type="date"
-                    value={editEvent.endDate}
-                    onChange={(e) => setEditEvent({ ...editEvent, endDate: e.target.value })}
-                    className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-300"
-                    placeholder="End Date (Optional)"
-                  />
-                  <input
-                    type="time"
-                    value={editEvent.endTime}
-                    onChange={(e) => setEditEvent({ ...editEvent, endTime: e.target.value })}
-                    className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-300"
-                  />
-                </div>
-
-                <input
-                  type="text"
-                  value={editEvent.location}
-                  onChange={(e) => setEditEvent({ ...editEvent, location: e.target.value })}
-                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-300"
-                  placeholder="Event Location"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
-                <button
-                  onClick={() => setEditEventModal(false)}
-                  className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleEventUpdate}
-                  disabled={loading}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-all duration-300 smooth-hover"
-                >
-                  {loading ? 'Updating...' : 'Update Event'}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
-
-       {/* Edit Company Modal */}
-{editCompanyModal && createPortal(
-  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
-    <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
-      <div className="flex items-center justify-between mb-6 fade-in-blur">
-        <h3 className="text-2xl font-bold text-gray-900">Edit Company</h3>
-        <button
-          onClick={() => setEditCompanyModal(false)}
-          className="text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          <X className="h-6 w-6" />
-        </button>
-      </div>
-      
-      <div className="space-y-4 stagger-children">
-        {/* Company Name */}
-        <div className="fade-in-blur">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Company Name *
-          </label>
-          <input
-            type="text"
-            value={editCompany.name}
-            onChange={(e) => setEditCompany({ ...editCompany, name: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
-            placeholder="Enter company name"
-          />
-        </div>
-
-        {/* Partner Type */}
-        <div className="fade-in-blur">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Partner Type *
-          </label>
-          <select
-            value={editCompany.partnerType}
-            onChange={(e) => setEditCompany({ ...editCompany, partnerType: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+{/* Booking Detail Modal */}
+{showBookingModal && selectedBooking && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
+      <div className="p-4 sm:p-6 stagger-children">
+        <div className="flex items-center justify-between mb-4 sm:mb-6 fade-in-blur">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900">Booking Details</h2>
+          <button
+            onClick={() => {
+              setShowBookingModal(false);
+              setSelectedBooking(null);
+            }}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
           >
-            <option value="">Select Partner Type</option>
-            {PARTNER_TYPES.map(type => (
-              <option key={type} value={type}>{type}</option>
-            ))}
-          </select>
+            <X className="h-5 w-5 sm:h-6 sm:w-6" />
+          </button>
         </div>
 
-        {/* Logo Section */}
-        <div className="fade-in-blur">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Company Logo
-          </label>
-          <div className="flex space-x-4 mb-3">
+        <div className="space-y-4 sm:space-y-6 fade-in-blur">
+          {/* User Information */}
+          <div className="text-center">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+              <User className="h-6 w-6 sm:h-10 sm:w-10 text-orange-600" />
+            </div>
+            <h3 className="text-xl sm:text-2xl font-bold text-gray-900">
+              {selectedBooking.user?.first_name} {selectedBooking.user?.last_name}
+            </h3>
+            <p className="text-gray-600 mt-2 text-sm sm:text-base">{selectedBooking.user?.email}</p>
+            <div className="inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium bg-blue-100 text-blue-800 mt-2">
+              Personal ID: {selectedBooking.user?.personal_id}
+            </div>
+          </div>
+
+          {/* Session Information */}
+          {selectedBooking.session && (
+            <div className="fade-in-blur">
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                <BookOpen className="h-4 w-4 mr-2" />
+                Session Details
+              </label>
+              <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                <h4 className="font-semibold text-gray-900 text-sm sm:text-base">{selectedBooking.session.title}</h4>
+                {selectedBooking.session.description && (
+                  <p className="text-gray-600 mt-1 text-xs sm:text-sm">{selectedBooking.session.description}</p>
+                )}
+                {selectedBooking.session.speaker && (
+                  <p className="text-gray-700 mt-2 text-xs sm:text-sm">
+                    <strong>Speaker:</strong> {selectedBooking.session.speaker}
+                  </p>
+                )}
+                <div className="grid grid-cols-2 gap-3 sm:gap-4 mt-3 text-xs sm:text-sm">
+                  <div>
+                    <strong>Date:</strong><br />
+                    {new Date(selectedBooking.session.start_time).toLocaleDateString()}
+                  </div>
+                  <div>
+                    <strong>Time:</strong><br />
+                    {new Date(selectedBooking.session.start_time).toLocaleTimeString()} - {new Date(selectedBooking.session.end_time).toLocaleTimeString()}
+                  </div>
+                  <div>
+                    <strong>Location:</strong><br />
+                    {selectedBooking.session.location}
+                  </div>
+                  <div>
+                    <strong>Type:</strong><br />
+                    {selectedBooking.session.session_type}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Booking Information */}
+          <div className="fade-in-blur">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Booking Information</label>
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
+              <div>
+                <strong>Booked On:</strong><br />
+                {new Date(selectedBooking.scanned_at).toLocaleDateString()}
+              </div>
+              <div>
+                <strong>Booked At:</strong><br />
+                {new Date(selectedBooking.scanned_at).toLocaleTimeString()}
+              </div>
+              <div>
+                <strong>Booking ID:</strong><br />
+                <code className="text-xs">{selectedBooking.id}</code>
+              </div>
+              <div>
+                <strong>Scan Type:</strong><br />
+                {selectedBooking.scan_type}
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="pt-4 space-y-3 fade-in-blur">
             <button
-              type="button"
-              onClick={() => setEditCompany({ ...editCompany, logoType: "link" })}
-              className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
-                editCompany.logoType === "link" 
-                  ? "bg-blue-500 text-white" 
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
+              onClick={() => openDeleteBookingModal(selectedBooking)}
+              className="w-full bg-red-500 text-white py-2 sm:py-3 px-4 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover font-medium text-sm sm:text-base"
             >
-              <Link className="h-4 w-4 mr-2" />
-              URL
+              <Trash2 className="h-4 w-4 mr-2 inline" />
+              Delete Booking
             </button>
+            
             <button
-              type="button"
-              onClick={() => setEditCompany({ ...editCompany, logoType: "upload" })}
-              className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
-                editCompany.logoType === "upload" 
-                  ? "bg-blue-500 text-white" 
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
+              onClick={() => {
+                setShowBookingModal(false);
+                setSelectedBooking(null);
+              }}
+              className="w-full bg-gray-100 text-gray-700 py-2 sm:py-3 px-4 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover font-medium text-sm sm:text-base"
             >
-              <Upload className="h-4 w-4 mr-2" />
-              Upload New
+              Close Details
             </button>
           </div>
-          
-          {editCompany.logoType === "link" ? (
-            <input
-              type="url"
-              value={editCompany.logoUrl}
-              onChange={(e) => setEditCompany({ ...editCompany, logoUrl: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
-              placeholder="https://example.com/logo.png"
-            />
-          ) : (
-            <div>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setEditCompany({ ...editCompany, logo: e.target.files?.[0] || null })}
-                className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Leave empty to keep current logo
-              </p>
-            </div>
-          )}
-          
-          {editCompany.logoUrl && (
-            <div className="mt-3 p-3 bg-gray-50 rounded-lg fade-in-blur">
-              <p className="text-sm text-gray-600 mb-2">Current Logo:</p>
-              <img 
-                src={editCompany.logoUrl} 
-                alt="Current logo" 
-                className="h-16 w-auto object-contain"
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/64x64/orange/white?text=Logo";
-                }}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Description */}
-        <div className="fade-in-blur">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Description
-          </label>
-          <textarea
-            value={editCompany.description}
-            onChange={(e) => setEditCompany({ ...editCompany, description: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
-            placeholder="Brief description about the company..."
-            rows={3}
-          />
-        </div>
-
-        {/* Website */}
-        <div className="fade-in-blur">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Website *
-          </label>
-          <input
-            type="url"
-            value={editCompany.website}
-            onChange={(e) => setEditCompany({ ...editCompany, website: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
-            placeholder="https://company-website.com"
-          />
-        </div>
-
-        {/* Booth Number */}
-        <div className="fade-in-blur">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Booth Number *
-          </label>
-          <input
-            type="text"
-            value={editCompany.boothNumber}
-            onChange={(e) => setEditCompany({ ...editCompany, boothNumber: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
-            placeholder="e.g., A-12, B-05"
-          />
         </div>
       </div>
+    </div>
+  </div>,
+  document.body
+)}
 
-      <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
-        <button
-          onClick={() => setEditCompanyModal(false)}
-          className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover font-medium"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleCompanyUpdate}
-          disabled={loading}
-          className="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-all duration-300 smooth-hover font-medium"
-        >
-          {loading ? (
-            <div className="flex items-center">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-              Updating...
-            </div>
-          ) : (
-            'Update Company'
-          )}
-        </button>
+{/* Delete Booking Confirmation Modal */}
+{deleteBookingModal && selectedBooking && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md modal-content-blur fade-in-up-blur">
+      <div className="p-4 sm:p-6">
+        <div className="flex items-center justify-between mb-4 fade-in-blur">
+          <h3 className="text-lg font-bold text-gray-900">Confirm Deletion</h3>
+          <button
+            onClick={() => {
+              setDeleteBookingModal(false);
+              setSelectedBooking(null);
+            }}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X className="h-5 w-5 sm:h-6 sm:w-6" />
+          </button>
+        </div>
+
+        <div className="fade-in-blur">
+          <p className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base">
+            Are you sure you want to delete the booking for{" "}
+            <strong>{selectedBooking.user?.first_name} {selectedBooking.user?.last_name}</strong>?
+            This action cannot be undone.
+          </p>
+
+          <div className="flex space-x-3">
+            <button
+              onClick={() => {
+                setDeleteBookingModal(false);
+                setSelectedBooking(null);
+              }}
+              className="flex-1 bg-gray-200 text-gray-700 py-2 px-3 sm:px-4 rounded-lg hover:bg-gray-300 transition-colors font-medium text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDeleteBooking}
+              disabled={loading}
+              className="flex-1 bg-red-500 text-white py-2 px-3 sm:px-4 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+            >
+              {loading ? 'Deleting...' : 'Delete Booking'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>,
@@ -3980,14 +3740,14 @@ export function AdminPanel() {
 {/* Add Company Modal */}
 {companyModal && createPortal(
   <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
-    <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
-      <div className="flex items-center justify-between mb-6 fade-in-blur">
-        <h3 className="text-2xl font-bold text-gray-900">Add New Company</h3>
+    <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
+      <div className="flex items-center justify-between mb-4 sm:mb-6 fade-in-blur">
+        <h3 className="text-xl sm:text-2xl font-bold text-gray-900">Add New Company</h3>
         <button
           onClick={() => setCompanyModal(false)}
           className="text-gray-400 hover:text-gray-600 transition-colors"
         >
-          <X className="h-6 w-6" />
+          <X className="h-5 w-5 sm:h-6 sm:w-6" />
         </button>
       </div>
       
@@ -4001,7 +3761,7 @@ export function AdminPanel() {
             type="text"
             value={newCompany.name}
             onChange={(e) => setNewCompany({ ...newCompany, name: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
             placeholder="Enter company name"
           />
         </div>
@@ -4014,7 +3774,7 @@ export function AdminPanel() {
           <select
             value={newCompany.partnerType}
             onChange={(e) => setNewCompany({ ...newCompany, partnerType: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
           >
             <option value="">Select Partner Type</option>
             {PARTNER_TYPES.map(type => (
@@ -4028,29 +3788,29 @@ export function AdminPanel() {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Company Logo *
           </label>
-          <div className="flex space-x-4 mb-3">
+          <div className="flex space-x-2 sm:space-x-4 mb-3">
             <button
               type="button"
               onClick={() => setNewCompany({ ...newCompany, logoType: "link" })}
-              className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
+              className={`flex items-center px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
                 newCompany.logoType === "link" 
                   ? "bg-blue-500 text-white" 
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
-              <Link className="h-4 w-4 mr-2" />
+              <Link className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
               URL
             </button>
             <button
               type="button"
               onClick={() => setNewCompany({ ...newCompany, logoType: "upload" })}
-              className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
+              className={`flex items-center px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
                 newCompany.logoType === "upload" 
                   ? "bg-blue-500 text-white" 
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
-              <Upload className="h-4 w-4 mr-2" />
+              <Upload className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
               Upload
             </button>
           </div>
@@ -4060,7 +3820,7 @@ export function AdminPanel() {
               type="url"
               value={newCompany.logoUrl}
               onChange={(e) => setNewCompany({ ...newCompany, logoUrl: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+              className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
               placeholder="https://example.com/logo.png"
             />
           ) : (
@@ -4069,13 +3829,63 @@ export function AdminPanel() {
                 type="file"
                 accept="image/*"
                 onChange={(e) => setNewCompany({ ...newCompany, logo: e.target.files?.[0] || null })}
-                className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+                className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
               />
               <p className="text-xs text-gray-500 mt-1">
                 Supported formats: PNG, JPG, SVG. Max size: 5MB
               </p>
             </div>
           )}
+        </div>
+
+        {/* Academic Faculties */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+            <BookOpen className="h-4 w-4 mr-2" />
+            Academic Faculties Seeking For
+          </label>
+          <div className="max-h-40 overflow-y-auto border border-gray-300 rounded-lg p-3">
+            <div className="grid grid-cols-1 gap-2">
+              {ACADEMIC_FACULTIES.map((faculty) => (
+                <label key={faculty} className="flex items-center space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedAcademicFaculties.includes(faculty)}
+                    onChange={() => handleAcademicFacultyChange(faculty)}
+                    className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                  />
+                  <span className="text-sm text-gray-700">{faculty}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            Select one or more faculties
+          </p>
+        </div>
+
+        {/* Vacancies Type */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+            <Briefcase className="h-4 w-4 mr-2" />
+            Vacancies Type
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            {VACANCIES_TYPES.map((type) => (
+              <label key={type} className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedVacanciesTypes.includes(type)}
+                  onChange={() => handleVacanciesTypeChange(type)}
+                  className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                />
+                <span className="text-sm text-gray-700">{type}</span>
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            Select one or more vacancy types
+          </p>
         </div>
 
         {/* Description */}
@@ -4086,7 +3896,7 @@ export function AdminPanel() {
           <textarea
             value={newCompany.description}
             onChange={(e) => setNewCompany({ ...newCompany, description: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
             placeholder="Brief description about the company..."
             rows={3}
           />
@@ -4101,7 +3911,7 @@ export function AdminPanel() {
             type="url"
             value={newCompany.website}
             onChange={(e) => setNewCompany({ ...newCompany, website: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
             placeholder="https://company-website.com"
           />
         </div>
@@ -4115,7 +3925,7 @@ export function AdminPanel() {
             type="text"
             value={newCompany.boothNumber}
             onChange={(e) => setNewCompany({ ...newCompany, boothNumber: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
             placeholder="e.g., A-12, B-05"
           />
         </div>
@@ -4124,18 +3934,18 @@ export function AdminPanel() {
       <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
         <button
           onClick={() => setCompanyModal(false)}
-          className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover font-medium"
+          className="px-4 sm:px-6 py-2 sm:py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover font-medium text-sm"
         >
           Cancel
         </button>
         <button
           onClick={handleCompanySubmit}
           disabled={loading}
-          className="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-all duration-300 smooth-hover font-medium"
+          className="px-4 sm:px-6 py-2 sm:py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-all duration-300 smooth-hover font-medium text-sm"
         >
           {loading ? (
             <div className="flex items-center">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+              <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-white mr-2"></div>
               Adding...
             </div>
           ) : (
@@ -4148,235 +3958,1144 @@ export function AdminPanel() {
   document.body
 )}
 
-        {/* Event Detail Modal */}
-        {eventDetailModal && selectedEventDetail && createPortal(
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
-              <div className="p-6 stagger-children">
-                <div className="flex items-center justify-between mb-6 fade-in-blur">
-                  <h2 className="text-xl font-bold text-gray-900">Event Details</h2>
-                  <button
-                    onClick={() => {
-                      setEventDetailModal(false);
-                      setSelectedEventDetail(null);
-                    }}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    <X className="h-6 w-6" />
-                  </button>
+{/* Edit Company Modal */}
+{editCompanyModal && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
+    <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
+      <div className="flex items-center justify-between mb-4 sm:mb-6 fade-in-blur">
+        <h3 className="text-xl sm:text-2xl font-bold text-gray-900">Edit Company</h3>
+        <button
+          onClick={() => setEditCompanyModal(false)}
+          className="text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          <X className="h-5 w-5 sm:h-6 sm:w-6" />
+        </button>
+      </div>
+      
+      <div className="space-y-4 stagger-children">
+        {/* Company Name */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Company Name *
+          </label>
+          <input
+            type="text"
+            value={editCompany.name}
+            onChange={(e) => setEditCompany({ ...editCompany, name: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter company name"
+          />
+        </div>
+
+        {/* Partner Type */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Partner Type *
+          </label>
+          <select
+            value={editCompany.partnerType}
+            onChange={(e) => setEditCompany({ ...editCompany, partnerType: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+          >
+            <option value="">Select Partner Type</option>
+            {PARTNER_TYPES.map(type => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Logo Section */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Company Logo
+          </label>
+          <div className="flex space-x-2 sm:space-x-4 mb-3">
+            <button
+              type="button"
+              onClick={() => setEditCompany({ ...editCompany, logoType: "link" })}
+              className={`flex items-center px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
+                editCompany.logoType === "link" 
+                  ? "bg-blue-500 text-white" 
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              <Link className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+              URL
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditCompany({ ...editCompany, logoType: "upload" })}
+              className={`flex items-center px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
+                editCompany.logoType === "upload" 
+                  ? "bg-blue-500 text-white" 
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              <Upload className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+              Upload New
+            </button>
+          </div>
+          
+          {editCompany.logoType === "link" ? (
+            <input
+              type="url"
+              value={editCompany.logoUrl}
+              onChange={(e) => setEditCompany({ ...editCompany, logoUrl: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+              placeholder="https://example.com/logo.png"
+            />
+          ) : (
+            <div>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setEditCompany({ ...editCompany, logo: e.target.files?.[0] || null })}
+                className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Leave empty to keep current logo
+              </p>
+            </div>
+          )}
+          
+          {editCompany.logoUrl && (
+            <div className="mt-3 p-3 bg-gray-50 rounded-lg fade-in-blur">
+              <p className="text-sm text-gray-600 mb-2">Current Logo:</p>
+              <img 
+                src={editCompany.logoUrl} 
+                alt="Current logo" 
+                className="h-12 sm:h-16 w-auto object-contain"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/64x64/orange/white?text=Logo";
+                }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Academic Faculties */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+            <BookOpen className="h-4 w-4 mr-2" />
+            Academic Faculties Seeking For
+          </label>
+          <div className="max-h-40 overflow-y-auto border border-gray-300 rounded-lg p-3">
+            <div className="grid grid-cols-1 gap-2">
+              {ACADEMIC_FACULTIES.map((faculty) => (
+                <label key={faculty} className="flex items-center space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editSelectedAcademicFaculties.includes(faculty)}
+                    onChange={() => handleEditAcademicFacultyChange(faculty)}
+                    className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                  />
+                  <span className="text-sm text-gray-700">{faculty}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            Select one or more faculties
+          </p>
+        </div>
+
+        {/* Vacancies Type */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+            <Briefcase className="h-4 w-4 mr-2" />
+            Vacancies Type
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            {VACANCIES_TYPES.map((type) => (
+              <label key={type} className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editSelectedVacanciesTypes.includes(type)}
+                  onChange={() => handleEditVacanciesTypeChange(type)}
+                  className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                />
+                <span className="text-sm text-gray-700">{type}</span>
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            Select one or more vacancy types
+          </p>
+        </div>
+
+        {/* Description */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Description
+          </label>
+          <textarea
+            value={editCompany.description}
+            onChange={(e) => setEditCompany({ ...editCompany, description: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Brief description about the company..."
+            rows={3}
+          />
+        </div>
+
+        {/* Website */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Website *
+          </label>
+          <input
+            type="url"
+            value={editCompany.website}
+            onChange={(e) => setEditCompany({ ...editCompany, website: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="https://company-website.com"
+          />
+        </div>
+
+        {/* Booth Number */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Booth Number *
+          </label>
+          <input
+            type="text"
+            value={editCompany.boothNumber}
+            onChange={(e) => setEditCompany({ ...editCompany, boothNumber: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="e.g., A-12, B-05"
+          />
+        </div>
+      </div>
+
+      <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
+        <button
+          onClick={() => setEditCompanyModal(false)}
+          className="px-4 sm:px-6 py-2 sm:py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover font-medium text-sm"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleCompanyUpdate}
+          disabled={loading}
+          className="px-4 sm:px-6 py-2 sm:py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-all duration-300 smooth-hover font-medium text-sm"
+        >
+          {loading ? (
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-white mr-2"></div>
+              Updating...
+            </div>
+          ) : (
+            'Update Company'
+          )}
+        </button>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
+
+{/* Session Detail Modal */}
+{sessionDetailModal && selectedSessionDetail && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
+      <div className="p-4 sm:p-6 stagger-children">
+        <div className="flex items-center justify-between mb-4 sm:mb-6 fade-in-blur">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900">Session Details</h2>
+          <button
+            onClick={() => {
+              setSessionDetailModal(false);
+              setSelectedSessionDetail(null);
+            }}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X className="h-5 w-5 sm:h-6 sm:w-6" />
+          </button>
+        </div>
+
+        <div className="space-y-4 sm:space-y-6 fade-in-blur">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">{selectedSessionDetail.title}</h3>
+            <p className="text-gray-600 mt-2 text-sm sm:text-base">{selectedSessionDetail.description}</p>
+          </div>
+
+          {selectedSessionDetail.speaker && (
+            <div className="fade-in-blur">
+              <label className="block text-sm font-medium text-gray-700">Speaker</label>
+              <p className="text-gray-900 text-sm sm:text-base">{selectedSessionDetail.speaker}</p>
+            </div>
+          )}
+
+          <div className="fade-in-blur">
+            <label className="block text-sm font-medium text-gray-700">Date & Time</label>
+            <p className="text-gray-900 text-sm sm:text-base">
+              {new Date(selectedSessionDetail.start_time).toLocaleDateString()} at{' '}
+              {new Date(selectedSessionDetail.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </p>
+          </div>
+
+          <div className="fade-in-blur">
+            <label className="block text-sm font-medium text-gray-700">Location</label>
+            <p className="text-gray-900 text-sm sm:text-base">{selectedSessionDetail.location}</p>
+          </div>
+
+          <div className="fade-in-blur">
+            <label className="block text-sm font-medium text-gray-700">Capacity</label>
+            <p className="text-gray-900 text-sm sm:text-base">
+              {selectedSessionDetail.current_bookings || 0} / {selectedSessionDetail.max_attendees || 'Unlimited'} booked
+            </p>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="pt-4 space-y-3 fade-in-blur">
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => {
+                  handleEditSession(selectedSessionDetail);
+                  setSessionDetailModal(false);
+                }}
+                className="bg-blue-500 text-white py-2 px-3 sm:px-4 rounded-lg hover:bg-blue-600 transition-all duration-300 smooth-hover font-medium text-xs sm:text-sm"
+              >
+                Edit Session
+              </button>
+              
+              <button
+                onClick={() => {
+                  setSessionDetailModal(false);
+                  handleDeleteSession(selectedSessionDetail);
+                }}
+                className="bg-red-500 text-white py-2 px-3 sm:px-4 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover font-medium text-xs sm:text-sm"
+              >
+                Delete Session
+              </button>
+            </div>
+            
+            <button
+              onClick={() => {
+                setSessionDetailModal(false);
+                setSelectedSessionDetail(null);
+              }}
+              className="w-full bg-gray-100 text-gray-700 py-2 sm:py-3 px-4 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover font-medium text-sm sm:text-base"
+            >
+              Close Details
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
+
+{/* Event Detail Modal */}
+{eventDetailModal && selectedEventDetail && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
+      <div className="p-4 sm:p-6 stagger-children">
+        <div className="flex items-center justify-between mb-4 sm:mb-6 fade-in-blur">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900">Event Details</h2>
+          <button
+            onClick={() => {
+              setEventDetailModal(false);
+              setSelectedEventDetail(null);
+            }}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X className="h-5 w-5 sm:h-6 sm:w-6" />
+          </button>
+        </div>
+
+        <div className="space-y-4 sm:space-y-6 fade-in-blur">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">{selectedEventDetail.title}</h3>
+            <p className="text-gray-700 leading-relaxed text-sm sm:text-base">{selectedEventDetail.description}</p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:gap-4 fade-in-blur">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date & Time</label>
+              <p className="text-gray-900 text-sm sm:text-base">
+                {new Date(selectedEventDetail.start_time).toLocaleDateString('en-US', { 
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
+              </p>
+              <p className="text-gray-600 text-xs sm:text-sm">
+                {new Date(selectedEventDetail.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - 
+                {new Date(selectedEventDetail.end_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </p>
+            </div>
+
+            <div className="fade-in-blur">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+              <p className="text-gray-900 text-sm sm:text-base flex items-center">
+                <MapPin className="h-4 w-4 mr-2" />
+                {selectedEventDetail.location}
+              </p>
+            </div>
+
+            {selectedEventDetail.item_type && (
+              <div className="fade-in-blur">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Event Type</label>
+                <span className="inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium bg-blue-100 text-blue-800">
+                  {selectedEventDetail.item_type}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="pt-4 space-y-3 fade-in-blur">
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => {
+                  handleEditEvent(selectedEventDetail);
+                  setEventDetailModal(false);
+                }}
+                className="bg-green-500 text-white py-2 px-3 sm:px-4 rounded-lg hover:bg-green-600 transition-all duration-300 smooth-hover font-medium text-xs sm:text-sm"
+              >
+                Edit Event
+              </button>
+              
+              <button
+                onClick={() => {
+                  setEventDetailModal(false);
+                  handleDeleteEvent(selectedEventDetail);
+                }}
+                className="bg-red-500 text-white py-2 px-3 sm:px-4 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover font-medium text-xs sm:text-sm"
+              >
+                Delete Event
+              </button>
+            </div>
+            
+            <button
+              onClick={() => {
+                setEventDetailModal(false);
+                setSelectedEventDetail(null);
+              }}
+              className="w-full bg-gray-100 text-gray-700 py-2 sm:py-3 px-4 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover font-medium text-sm sm:text-base"
+            >
+              Close Details
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
+
+{/* Delete Confirmation Modals */}
+{deleteSessionModal && selectedSessionDelete && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md modal-content-blur fade-in-up-blur">
+      <div className="p-4 sm:p-6">
+        <div className="flex items-center justify-between mb-4 fade-in-blur">
+          <h3 className="text-lg font-bold text-gray-900">Confirm Deletion</h3>
+          <button
+            onClick={() => {
+              setDeleteSessionModal(false);
+              setSelectedSessionDelete(null);
+            }}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X className="h-5 w-5 sm:h-6 sm:w-6" />
+          </button>
+        </div>
+
+        <div className="fade-in-blur">
+          <p className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base">
+            Are you sure you want to delete the session{" "}
+            <strong>"{selectedSessionDelete.title}"</strong>?
+            This action cannot be undone.
+          </p>
+
+          <div className="flex space-x-3">
+            <button
+              onClick={() => {
+                setDeleteSessionModal(false);
+                setSelectedSessionDelete(null);
+              }}
+              className="flex-1 bg-gray-200 text-gray-700 py-2 px-3 sm:px-4 rounded-lg hover:bg-gray-300 transition-colors font-medium text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmDeleteSession}
+              disabled={loading}
+              className="flex-1 bg-red-500 text-white py-2 px-3 sm:px-4 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+            >
+              {loading ? 'Deleting...' : 'Delete Session'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
+
+{deleteEventModal && selectedEventDelete && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md modal-content-blur fade-in-up-blur">
+      <div className="p-4 sm:p-6">
+        <div className="flex items-center justify-between mb-4 fade-in-blur">
+          <h3 className="text-lg font-bold text-gray-900">Confirm Deletion</h3>
+          <button
+            onClick={() => {
+              setDeleteEventModal(false);
+              setSelectedEventDelete(null);
+            }}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X className="h-5 w-5 sm:h-6 sm:w-6" />
+          </button>
+        </div>
+
+        <div className="fade-in-blur">
+          <p className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base">
+            Are you sure you want to delete the event{" "}
+            <strong>"{selectedEventDelete.title}"</strong>?
+            This action cannot be undone.
+          </p>
+
+          <div className="flex space-x-3">
+            <button
+              onClick={() => {
+                setDeleteEventModal(false);
+                setSelectedEventDelete(null);
+              }}
+              className="flex-1 bg-gray-200 text-gray-700 py-2 px-3 sm:px-4 rounded-lg hover:bg-gray-300 transition-colors font-medium text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmDeleteEvent}
+              disabled={loading}
+              className="flex-1 bg-red-500 text-white py-2 px-3 sm:px-4 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+            >
+              {loading ? 'Deleting...' : 'Delete Event'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
+
+{deleteCompanyModal && selectedCompanyDelete && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md modal-content-blur fade-in-up-blur">
+      <div className="p-4 sm:p-6">
+        <div className="flex items-center justify-between mb-4 fade-in-blur">
+          <h3 className="text-lg font-bold text-gray-900">Confirm Deletion</h3>
+          <button
+            onClick={() => {
+              setDeleteCompanyModal(false);
+              setSelectedCompanyDelete(null);
+            }}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X className="h-5 w-5 sm:h-6 sm:w-6" />
+          </button>
+        </div>
+
+        <div className="fade-in-blur">
+          <p className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base">
+            Are you sure you want to delete the company{" "}
+            <strong>"{selectedCompanyDelete.name}"</strong>?
+            This action cannot be undone.
+          </p>
+
+          <div className="flex space-x-3">
+            <button
+              onClick={() => {
+                setDeleteCompanyModal(false);
+                setSelectedCompanyDelete(null);
+              }}
+              className="flex-1 bg-gray-200 text-gray-700 py-2 px-3 sm:px-4 rounded-lg hover:bg-gray-300 transition-colors font-medium text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDeleteCompany}
+              disabled={loading}
+              className="flex-1 bg-red-500 text-white py-2 px-3 sm:px-4 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+            >
+              {loading ? 'Deleting...' : 'Delete Company'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
+
+{/* Add Session Modal */}
+{sessionModal && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
+    <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
+      <div className="flex items-center justify-between mb-4 sm:mb-6 fade-in-blur">
+        <h3 className="text-xl sm:text-2xl font-bold text-gray-900">Add New Session</h3>
+        <button
+          onClick={() => setSessionModal(false)}
+          className="text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          <X className="h-5 w-5 sm:h-6 sm:w-6" />
+        </button>
+      </div>
+      
+      <div className="space-y-4 stagger-children">
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Session Title *
+          </label>
+          <input
+            type="text"
+            value={newSession.title}
+            onChange={(e) => setNewSession({ ...newSession, title: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter session title"
+          />
+        </div>
+
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Description
+          </label>
+          <textarea
+            value={newSession.description}
+            onChange={(e) => setNewSession({ ...newSession, description: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter session description"
+            rows={3}
+          />
+        </div>
+
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Speaker *
+          </label>
+          <input
+            type="text"
+            value={newSession.speaker}
+            onChange={(e) => setNewSession({ ...newSession, speaker: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter speaker name"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 fade-in-blur">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Date *
+            </label>
+            <input
+              type="date"
+              value={newSession.date}
+              onChange={(e) => setNewSession({ ...newSession, date: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Time *
+            </label>
+            <input
+              type="time"
+              value={newSession.hour}
+              onChange={(e) => setNewSession({ ...newSession, hour: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            />
+          </div>
+        </div>
+
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Location
+          </label>
+          <input
+            type="text"
+            value={newSession.location}
+            onChange={(e) => setNewSession({ ...newSession, location: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter location"
+          />
+        </div>
+
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Capacity
+          </label>
+          <input
+            type="number"
+            value={newSession.capacity}
+            onChange={(e) => setNewSession({ ...newSession, capacity: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter capacity (leave empty for unlimited)"
+          />
+        </div>
+
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Session Type
+          </label>
+          <select
+            value={newSession.type}
+            onChange={(e) => setNewSession({ ...newSession, type: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+          >
+            <option value="session">Session</option>
+            <option value="workshop">Workshop</option>
+            <option value="keynote">Keynote</option>
+            <option value="panel">Panel Discussion</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
+        <button
+          onClick={() => setSessionModal(false)}
+          className="px-4 sm:px-6 py-2 sm:py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover font-medium text-sm"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSessionSubmit}
+          disabled={loading}
+          className="px-4 sm:px-6 py-2 sm:py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-all duration-300 smooth-hover font-medium text-sm"
+        >
+          {loading ? (
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-white mr-2"></div>
+              Adding...
+            </div>
+          ) : (
+            'Add Session'
+          )}
+        </button>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
+
+{/* Add Event Modal */}
+{eventModal && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
+    <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
+      <div className="flex items-center justify-between mb-4 sm:mb-6 fade-in-blur">
+        <h3 className="text-xl sm:text-2xl font-bold text-gray-900">Add New Event</h3>
+        <button
+          onClick={() => setEventModal(false)}
+          className="text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          <X className="h-5 w-5 sm:h-6 sm:w-6" />
+        </button>
+      </div>
+      
+      <div className="space-y-4 stagger-children">
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Event Title *
+          </label>
+          <input
+            type="text"
+            value={newEvent.title}
+            onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter event title"
+          />
+        </div>
+
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Description
+          </label>
+          <textarea
+            value={newEvent.description}
+            onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter event description"
+            rows={3}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 fade-in-blur">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Start Date *
+            </label>
+            <input
+              type="date"
+              value={newEvent.startDate}
+              onChange={(e) => setNewEvent({ ...newEvent, startDate: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Start Time *
+            </label>
+            <input
+              type="time"
+              value={newEvent.startTime}
+              onChange={(e) => setNewEvent({ ...newEvent, startTime: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 fade-in-blur">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              End Date
+            </label>
+            <input
+              type="date"
+              value={newEvent.endDate}
+              onChange={(e) => setNewEvent({ ...newEvent, endDate: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              End Time
+            </label>
+            <input
+              type="time"
+              value={newEvent.endTime}
+              onChange={(e) => setNewEvent({ ...newEvent, endTime: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            />
+          </div>
+        </div>
+
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Location
+          </label>
+          <input
+            type="text"
+            value={newEvent.location}
+            onChange={(e) => setNewEvent({ ...newEvent, location: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter location"
+          />
+        </div>
+
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Event Type
+          </label>
+          <select
+            value={newEvent.type}
+            onChange={(e) => setNewEvent({ ...newEvent, type: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+          >
+            <option value="general">General</option>
+            <option value="keynote">Keynote</option>
+            <option value="workshop">Workshop</option>
+            <option value="networking">Networking</option>
+            <option value="ceremony">Ceremony</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
+        <button
+          onClick={() => setEventModal(false)}
+          className="px-4 sm:px-6 py-2 sm:py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover font-medium text-sm"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleEventSubmit}
+          disabled={loading}
+          className="px-4 sm:px-6 py-2 sm:py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 transition-all duration-300 smooth-hover font-medium text-sm"
+        >
+          {loading ? (
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-white mr-2"></div>
+              Adding...
+            </div>
+          ) : (
+            'Add Event'
+          )}
+        </button>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
+
+{/* Announcement Modal */}
+{announcementModal && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
+    <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
+      <div className="flex items-center justify-between mb-4 sm:mb-6 fade-in-blur">
+        <h3 className="text-xl sm:text-2xl font-bold text-gray-900">Send Announcement</h3>
+        <button
+          onClick={() => setAnnouncementModal(false)}
+          className="text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          <X className="h-5 w-5 sm:h-6 sm:w-6" />
+        </button>
+      </div>
+      
+      <div className="space-y-4 stagger-children">
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Announcement Title *
+          </label>
+          <input
+            type="text"
+            value={announcementTitle}
+            onChange={(e) => setAnnouncementTitle(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter announcement title"
+          />
+        </div>
+
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Announcement Description *
+          </label>
+          <textarea
+            value={announcementDescription}
+            onChange={(e) => setAnnouncementDescription(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter announcement description"
+            rows={4}
+          />
+        </div>
+
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Target Audience *
+          </label>
+          <select
+            value={announcementRole}
+            onChange={(e) => setAnnouncementRole(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+          >
+            {announcementRoleOptions.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {announcementRole === "team_leader" && (
+          <div className="fade-in-blur">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Team Leader Of
+            </label>
+            <select
+              value={teamLeaderOfRole}
+              onChange={(e) => setTeamLeaderOfRole(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            >
+              <option value="all">All Team Leaders</option>
+              <option value="registration">Registration Team Leaders</option>
+              <option value="building">Building Team Leaders</option>
+              <option value="info_desk">Info Desk Team Leaders</option>
+              <option value="ushers">Ushers Team Leaders</option>
+              <option value="marketing">Marketing Team Leaders</option>
+              <option value="media">Media Team Leaders</option>
+              <option value="ER">ER Team Leaders</option>
+              <option value="BD">Business Development Team Leaders</option>
+              <option value="catering">Catering Team Leaders</option>
+              <option value="feedback">Feedback Team Leaders</option>
+              <option value="stage">Stage Team Leaders</option>
+            </select>
+          </div>
+        )}
+
+        {announcementRole === "custom" && (
+          <div className="fade-in-blur">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select Users
+            </label>
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={userSearch}
+                onChange={(e) => {
+                  setUserSearch(e.target.value);
+                  searchUsersByPersonalId(e.target.value);
+                }}
+                className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+                placeholder="Search by Personal ID or Volunteer ID"
+              />
+              
+              {searchLoading && (
+                <div className="text-center py-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-500 mx-auto"></div>
                 </div>
+              )}
 
-                <div className="space-y-6 fade-in-blur">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">{selectedEventDetail.title}</h3>
-                    <p className="text-gray-600 mt-2">{selectedEventDetail.description}</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Date & Time</label>
-                    <p className="text-gray-900">
-                      {new Date(selectedEventDetail.start_time).toLocaleDateString()} at{' '}
-                      {new Date(selectedEventDetail.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </p>
-                    {selectedEventDetail.end_time && (
-                      <p className="text-gray-500 text-sm">
-                        Ends at {new Date(selectedEventDetail.end_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Location</label>
-                    <p className="text-gray-900">{selectedEventDetail.location || 'Not specified'}</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Type</label>
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
-                      {selectedEventDetail.item_type}
-                    </span>
-                  </div>
-
-                  <div className="pt-4 border-t border-gray-200 fade-in-blur">
-                    <button
-                      onClick={() => setEventDetailModal(false)}
-                      className="w-full bg-green-500 text-white py-3 px-4 rounded-lg hover:bg-green-600 transition-all duration-300 smooth-hover font-medium"
+              {searchResults.length > 0 && (
+                <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-lg">
+                  {searchResults.map(user => (
+                    <div
+                      key={user.id}
+                      onClick={() => addUserToSelection(user)}
+                      className="p-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
                     >
-                      Close Details
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="text-sm font-medium">{user.first_name} {user.last_name}</p>
+                          <p className="text-xs text-gray-500">{user.personal_id} • {user.role}</p>
+                        </div>
+                        <Plus className="h-4 w-4 text-green-500" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {selectedUsers.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">Selected Users ({selectedUsers.length})</span>
+                    <button
+                      onClick={clearUserSelection}
+                      className="text-xs text-red-500 hover:text-red-700"
+                    >
+                      Clear All
                     </button>
                   </div>
+                  <div className="max-h-24 overflow-y-auto border border-gray-200 rounded-lg p-2">
+                    {selectedUsers.map(userId => {
+                      const user = searchResults.find(u => u.id === userId) || 
+                                  { first_name: 'Loading...', last_name: '', personal_id: '' };
+                      return (
+                        <div key={userId} className="flex justify-between items-center p-1">
+                          <span className="text-xs">
+                            {user.first_name} {user.last_name} ({user.personal_id})
+                          </span>
+                          <button
+                            onClick={() => removeUserFromSelection(userId)}
+                            className="text-red-400 hover:text-red-600"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
-          </div>,
-          document.body
-        )}
-
-        {/* Delete Company Confirmation Modal */}
-        {deleteCompanyModal && selectedCompanyDelete && createPortal(
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
-            <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md modal-content-blur fade-in-up-blur">
-              <h3 className="text-xl font-bold mb-4 text-red-600 fade-in-blur">Delete Company</h3>
-              <p className="text-gray-700 mb-6 fade-in-blur">
-                Are you sure you want to delete <strong>{selectedCompanyDelete.name}</strong>? 
-                This action cannot be undone.
-              </p>
-              <div className="flex justify-end space-x-3 fade-in-blur">
-                <button
-                  onClick={() => {
-                    setDeleteCompanyModal(false);
-                    setSelectedCompanyDelete(null);
-                  }}
-                  className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleDeleteCompany}
-                  disabled={loading}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-all duration-300 smooth-hover"
-                >
-                  {loading ? 'Deleting...' : 'Delete Company'}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
-
-        {/* Delete Session Confirmation Modal */}
-        {deleteSessionModal && selectedSessionDelete && createPortal(
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
-            <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md modal-content-blur fade-in-up-blur">
-              <h3 className="text-xl font-bold mb-4 text-red-600 fade-in-blur">Delete Session</h3>
-              <p className="text-gray-700 mb-6 fade-in-blur">
-                Are you sure you want to delete the session <strong>"{selectedSessionDelete.title}"</strong>? 
-                This action cannot be undone.
-              </p>
-              <div className="flex justify-end space-x-3 fade-in-blur">
-                <button
-                  onClick={() => {
-                    setDeleteSessionModal(false);
-                    setSelectedSessionDelete(null);
-                  }}
-                  className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmDeleteSession}
-                  disabled={loading}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-all duration-300 smooth-hover"
-                >
-                  {loading ? 'Deleting...' : 'Delete Session'}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
-
-        {/* Delete Event Confirmation Modal */}
-        {deleteEventModal && selectedEventDelete && createPortal(
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
-            <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md modal-content-blur fade-in-up-blur">
-              <h3 className="text-xl font-bold mb-4 text-red-600 fade-in-blur">Delete Event</h3>
-              <p className="text-gray-700 mb-6 fade-in-blur">
-                Are you sure you want to delete the event <strong>"{selectedEventDelete.title}"</strong>? 
-                This action cannot be undone.
-              </p>
-              <div className="flex justify-end space-x-3 fade-in-blur">
-                <button
-                  onClick={() => {
-                    setDeleteEventModal(false);
-                    setSelectedEventDelete(null);
-                  }}
-                  className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmDeleteEvent}
-                  disabled={loading}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-all duration-300 smooth-hover"
-                >
-                  {loading ? 'Deleting...' : 'Delete Event'}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
+          </div>
         )}
       </div>
 
-      <style>{`
-        .fade-in-blur {
-          animation: fadeInBlur 0.5s ease-out forwards;
-        }
+      <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
+        <button
+          onClick={() => setAnnouncementModal(false)}
+          className="px-4 sm:px-6 py-2 sm:py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover font-medium text-sm"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleAnnouncementSubmit}
+          disabled={loading}
+          className="px-4 sm:px-6 py-2 sm:py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 disabled:opacity-50 transition-all duration-300 smooth-hover font-medium text-sm"
+        >
+          {loading ? (
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-white mr-2"></div>
+              Sending...
+            </div>
+          ) : (
+            'Send Announcement'
+          )}
+        </button>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
 
-        .fade-in-up-blur {
-          animation: fadeInUpBlur 0.5s ease-out forwards;
-        }
+{/* Map Upload Modal */}
+{mapModal && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
+    <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 w-full max-w-md modal-content-blur fade-in-up-blur">
+      <div className="flex items-center justify-between mb-4 sm:mb-6 fade-in-blur">
+        <h3 className="text-xl sm:text-2xl font-bold text-gray-900">Upload Map</h3>
+        <button
+          onClick={() => setMapModal(false)}
+          className="text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          <X className="h-5 w-5 sm:h-6 sm:w-6" />
+        </button>
+      </div>
+      
+      <div className="space-y-4 stagger-children">
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Select Day
+          </label>
+          <select
+            value={mapForm.day}
+            onChange={(e) => setMapForm({ ...mapForm, day: parseInt(e.target.value) })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+          >
+            {[1, 2, 3, 4, 5].map(day => (
+              <option key={day} value={day}>Day {day}</option>
+            ))}
+          </select>
+        </div>
 
-        .modal-backdrop-blur {
-          backdrop-filter: blur(8px);
-        }
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Map Image *
+          </label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setMapForm({ ...mapForm, image: e.target.files?.[0] || null })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Supported formats: PNG, JPG. Recommended size: 800x600px
+          </p>
+        </div>
+      </div>
 
-        .modal-content-blur {
-          backdrop-filter: blur(20px);
-        }
-
-        .card-hover {
-          transition: all 0.3s ease;
-        }
-
-        .card-hover:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
-        }
-
-        .smooth-hover {
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .dashboard-card {
-          border: 1px solid rgba(255, 165, 0, 0.1);
-        }
-
-        .stagger-children > * {
-          animation: fadeInUpBlur 0.5s ease-out forwards;
-        }
-
-        .stagger-children > *:nth-child(1) { animation-delay: 0.1s; }
-        .stagger-children > *:nth-child(2) { animation-delay: 0.2s; }
-        .stagger-children > *:nth-child(3) { animation-delay: 0.3s; }
-        .stagger-children > *:nth-child(4) { animation-delay: 0.4s; }
-        .stagger-children > *:nth-child(5) { animation-delay: 0.5s; }
-
-        @keyframes fadeInBlur {
-          0% {
-            opacity: 0;
-            filter: blur(10px);
-          }
-          100% {
-            opacity: 1;
-            filter: blur(0);
-          }
-        }
-
-        @keyframes fadeInUpBlur {
-          0% {
-            opacity: 0;
-            transform: translateY(20px);
-            filter: blur(10px);
-          }
-          100% {
-            opacity: 1;
-            transform: translateY(0);
-            filter: blur(0);
-          }
-        }
-      `}</style>
+      <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
+        <button
+          onClick={() => setMapModal(false)}
+          className="px-4 sm:px-6 py-2 sm:py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover font-medium text-sm"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleMapUpload}
+          disabled={loading || !mapForm.image}
+          className="px-4 sm:px-6 py-2 sm:py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-all duration-300 smooth-hover font-medium text-sm"
+        >
+          {loading ? (
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-white mr-2"></div>
+              Uploading...
+            </div>
+          ) : (
+            'Upload Map'
+          )}
+        </button>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
+        
+      </div>
     </DashboardLayout>
   );
 }
