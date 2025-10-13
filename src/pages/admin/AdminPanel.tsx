@@ -492,45 +492,127 @@ export function AdminPanel() {
     return Math.max(1, Math.min(5, diffDays + 1));
   };
 
-  // Fetch Open Recruitment Day bookings
-  const fetchOpenRecruitmentBookings = async (day: number) => {
-    try {
-      // Calculate the date for the specific day
-      const eventStartDate = new Date('2025-10-19');
-      const targetDate = new Date(eventStartDate);
-      targetDate.setDate(eventStartDate.getDate() + (day - 1));
-      
-      const startOfDay = new Date(targetDate);
-      startOfDay.setHours(0, 0, 0, 0);
-      
-      const endOfDay = new Date(targetDate);
-      endOfDay.setHours(23, 59, 59, 999);
+// Fetch Open Recruitment Day bookings using RPC
+// Enhanced fetch function with RPC and fallback
+// Fetch Open Recruitment Day bookings using RPC
+const fetchOpenRecruitmentBookings = async (day: number): Promise<AttendanceItem[]> => {
+  try {
+    console.log(`Fetching bookings for Day ${day} using RPC...`);
 
-      // Fetch bookings for the specific day
-      const { data: bookings, error } = await supabase
-        .from('attendances')
-        .select(`
-          *,
-          user:users_profiles(*),
-          session:sessions(*)
-        `)
-        .eq('scan_type', 'booking')
-        .gte('scanned_at', startOfDay.toISOString())
-        .lte('scanned_at', endOfDay.toISOString())
-        .order('scanned_at', { ascending: false });
+    const { data: bookings, error } = await supabase
+      .rpc('get_open_recruitment_bookings', { day_number: day });
 
-      if (error) {
-        console.error(`Error fetching day ${day} bookings:`, error);
-        return [];
+    if (error) {
+      console.error(`RPC error for Day ${day}:`, error);
+      return await fetchOpenRecruitmentBookingsDirect(day);
+    }
+
+    console.log(`RPC returned ${bookings?.length || 0} bookings for Day ${day}`);
+
+    // Transform the data to match the expected format
+    const transformedBookings: AttendanceItem[] = (bookings || []).map(booking => ({
+      id: booking.attendance_id,
+      user_id: booking.user_id,
+      session_id: booking.session_id,
+      scan_type: booking.scan_type,
+      scanned_at: booking.scanned_at,
+      scanned_by: '', // Not available from RPC
+      location: null, // Not available from RPC
+      user: {
+        id: booking.user_id,
+        first_name: booking.first_name,
+        last_name: booking.last_name,
+        personal_id: booking.personal_id,
+        email: booking.email,
+        faculty: booking.faculty,
+        university: booking.university,
+        gender: booking.gender,
+        phone: booking.phone,
+        degree_level: booking.degree_level,
+        program: booking.program,
+        class: booking.class,
+        nationality: booking.nationality,
+        role: 'attendee' // Default role
+      },
+      session: {
+        id: booking.session_id,
+        title: booking.session_title,
+        description: booking.session_description,
+        speaker: booking.session_speaker,
+        start_time: booking.session_start_time,
+        end_time: booking.session_end_time,
+        location: booking.session_location,
+        capacity: booking.session_capacity,
+        current_bookings: booking.session_current_bookings,
+        session_type: booking.session_type
       }
+    }));
 
-      return bookings || [];
-    } catch (error) {
-      console.error(`Error fetching day ${day} bookings:`, error);
+    return transformedBookings;
+  } catch (error) {
+    console.error(`Unexpected error fetching Day ${day} bookings:`, error);
+    return await fetchOpenRecruitmentBookingsDirect(day);
+  }
+};
+
+// Fixed direct query with explicit relationship specification
+const fetchOpenRecruitmentBookingsDirect = async (day: number): Promise<AttendanceItem[]> => {
+  try {
+    const day4SessionId = '30de32fb-1051-493a-a983-9f22394025f0';
+    const day5SessionId = '320259ad-117a-4e21-b74b-bfe493e3eea3';
+    
+    const targetSessionId = day === 4 ? day4SessionId : day5SessionId;
+
+    // Use explicit relationship naming to avoid ambiguity
+    const { data: bookings, error } = await supabase
+      .from('attendances')
+      .select(`
+        *,
+        user:users_profiles!attendances_user_id_fkey(
+          id,
+          first_name,
+          last_name,
+          personal_id,
+          email,
+          faculty,
+          university,
+          gender,
+          phone,
+          degree_level,
+          program,
+          class,
+          nationality,
+          role
+        ),
+        session:sessions(
+          id,
+          title,
+          description,
+          speaker,
+          start_time,
+          end_time,
+          location,
+          session_type,
+          capacity,
+          current_bookings
+        )
+      `)
+      .eq('scan_type', 'booking')
+      .eq('session_id', targetSessionId)
+      .order('scanned_at', { ascending: false });
+
+    if (error) {
+      console.error(`Direct query error for Day ${day}:`, error);
       return [];
     }
-  };
 
+    console.log(`Direct query returned ${bookings?.length || 0} bookings for Day ${day}`);
+    return bookings || [];
+  } catch (error) {
+    console.error(`Fallback error for Day ${day}:`, error);
+    return [];
+  }
+};
   // Load bookings when Open Recruitment tab is active
   useEffect(() => {
     if (activeTab === "open-recruitment") {
@@ -707,42 +789,43 @@ export function AdminPanel() {
     }
   };
 
-  const handleEditSession = (session: SessionItem) => {
-    setSelectedSessionEdit(session);
-    const startTime = new Date(session.start_time);
-    setEditSession({
-      id: session.id,
-      title: session.title || "",
-      description: session.description || "",
-      speaker: session.speaker || "",
-      capacity: (session.current_bookings ?? "") as any,
-      type: session.session_type || "session",
-      date: startTime.toISOString().split('T')[0],
-      hour: startTime.toTimeString().slice(0, 5),
-      location: session.location || "",
-    });
-    setEditSessionModal(true);
-  };
+const handleEditSession = (session: SessionItem) => {
+  setSelectedSessionEdit(session);
+  const startTime = new Date(session.start_time);
+  setEditSession({
+    id: session.id,
+    title: session.title || "",
+    description: session.description || "",
+    speaker: session.speaker || "",
+    capacity: (session.current_bookings ?? "") as any,
+    type: session.session_type || "session",
+    date: startTime.toISOString().split('T')[0],
+    hour: startTime.toTimeString().slice(0, 5),
+    location: session.location || "",
+  });
+  setEditSessionModal(true);
+  setSessionDetailModal(false); // Close detail modal when editing
+};
 
-  const handleEditEvent = (event: EventItem) => {
-    setSelectedEventEdit(event);
-    const startTime = new Date(event.start_time);
-    const endTime = event.end_time ? new Date(event.end_time) : null;
-    
-    setEditEvent({
-      id: event.id,
-      title: event.title || "",
-      description: event.description || "",
-      startDate: startTime.toISOString().split('T')[0],
-      startTime: startTime.toTimeString().slice(0, 5),
-      endDate: endTime ? endTime.toISOString().split('T')[0] : "",
-      endTime: endTime ? endTime.toTimeString().slice(0, 5) : "",
-      location: event.location || "",
-      type: event.item_type || "general",
-    });
-    setEditEventModal(true);
-  };
-
+const handleEditEvent = (event: EventItem) => {
+  setSelectedEventEdit(event);
+  const startTime = new Date(event.start_time);
+  const endTime = event.end_time ? new Date(event.end_time) : null;
+  
+  setEditEvent({
+    id: event.id,
+    title: event.title || "",
+    description: event.description || "",
+    startDate: startTime.toISOString().split('T')[0],
+    startTime: startTime.toTimeString().slice(0, 5),
+    endDate: endTime ? endTime.toISOString().split('T')[0] : "",
+    endTime: endTime ? endTime.toTimeString().slice(0, 5) : "",
+    location: event.location || "",
+    type: event.item_type || "general",
+  });
+  setEditEventModal(true);
+  setEventDetailModal(false); // Close detail modal when editing
+};
   const handleEventClick = (event: EventItem) => {
     setSelectedEventDetail(event);
     setEventDetailModal(true);
@@ -778,31 +861,30 @@ export function AdminPanel() {
         session_type: editSession.type,
       }).eq('id', editSession.id);
 
-      if (error) {
-        showFeedback("Failed to update session", "error");
-      } else {
-        setEditSessionModal(false);
-        setEditSession({
-          id: "",
-          title: "",
-          date: "",
-          speaker: "",
-          capacity: "",
-          type: "session",
-          hour: "",
-          location: "",
-          description: "",
-        });
-        showFeedback("Session updated successfully!", "success");
-        await fetchSessions();
-      }
-    } catch (err) {
+       if (error) {
       showFeedback("Failed to update session", "error");
-    } finally {
-      setLoading(false);
+    } else {
+      setEditSessionModal(false); // Close edit modal
+      setEditSession({
+        id: "",
+        title: "",
+        date: "",
+        speaker: "",
+        capacity: "",
+        type: "session",
+        hour: "",
+        location: "",
+        description: "",
+      });
+      showFeedback("Session updated successfully!", "success");
+      await fetchSessions();
     }
-  };
-
+  } catch (err) {
+    showFeedback("Failed to update session", "error");
+  } finally {
+    setLoading(false);
+  }
+};
   const handleEventUpdate = async () => {
     if (!editEvent.title || !editEvent.startDate || !editEvent.startTime) {
       showFeedback("Please fill all required fields!", "error");
@@ -826,29 +908,29 @@ export function AdminPanel() {
       }).eq('id', editEvent.id);
 
       if (error) {
-        showFeedback("Failed to update event", "error");
-      } else {
-        setEditEventModal(false);
-        setEditEvent({
-          id: "",
-          title: "",
-          description: "",
-          startDate: "",
-          endDate: "",
-          startTime: "",
-          endTime: "",
-          location: "",
-          type: "general",
-        });
-        showFeedback("Event updated successfully!", "success");
-        await fetchEventsByDay(activeDay);
-      }
-    } catch (err) {
       showFeedback("Failed to update event", "error");
-    } finally {
-      setLoading(false);
+    } else {
+      setEditEventModal(false); // Close edit modal
+      setEditEvent({
+        id: "",
+        title: "",
+        description: "",
+        startDate: "",
+        endDate: "",
+        startTime: "",
+        endTime: "",
+        location: "",
+        type: "general",
+      });
+      showFeedback("Event updated successfully!", "success");
+      await fetchEventsByDay(activeDay);
     }
-  };
+  } catch (err) {
+    showFeedback("Failed to update event", "error");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleEditCompany = (company: CompanyItem) => {
     setSelectedCompanyEdit(company);
@@ -1100,35 +1182,34 @@ export function AdminPanel() {
 
       const { error } = await supabase.from("companies").update(updateData).eq('id', editCompany.id);
 
-      if (error) {
-        showFeedback("Failed to update company", "error");
-      } else {
-        setEditCompanyModal(false);
-        setEditCompany({
-          id: "",
-          name: "",
-          logo: null,
-          logoUrl: "",
-          logoType: "link",
-          description: "",
-          website: "",
-          boothNumber: "",
-          partnerType: "",
-          academicFaculties: [],
-          vacanciesType: [],
-        });
-        setEditSelectedAcademicFaculties([]);
-        setEditSelectedVacanciesTypes([]);
-        showFeedback("Company updated successfully!", "success");
-        await fetchCompanies();
-      }
-    } catch (err) {
+       if (error) {
       showFeedback("Failed to update company", "error");
-    } finally {
-      setLoading(false);
+    } else {
+      setEditCompanyModal(false); // Close edit modal
+      setEditCompany({
+        id: "",
+        name: "",
+        logo: null,
+        logoUrl: "",
+        logoType: "link",
+        description: "",
+        website: "",
+        boothNumber: "",
+        partnerType: "",
+        academicFaculties: [],
+        vacanciesType: [],
+      });
+      setEditSelectedAcademicFaculties([]);
+      setEditSelectedVacanciesTypes([]);
+      showFeedback("Company updated successfully!", "success");
+      await fetchCompanies();
     }
-  };
-
+  } catch (err) {
+    showFeedback("Failed to update company", "error");
+  } finally {
+    setLoading(false);
+  }
+};
   const fetchBuildingStats = async () => {
     try {
       const { data: dynamicStats, error } = await getDynamicBuildingStats();
@@ -2971,28 +3052,34 @@ export function AdminPanel() {
                       </span>
                     </div>
                     
-                    <div className="flex gap-2 mt-4">
-                      <button
-                        onClick={() => handleSessionClick(session)}
-                        className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
-                      >
-                        <Eye className="h-3 w-3 mr-1 inline" />
-                        View
-                      </button>
-                      <button
-                        onClick={() => handleEditSession(session)}
-                        className="flex-1 bg-blue-500 text-white py-2 px-3 rounded-lg hover:bg-blue-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteSession(session)}
-                        className="flex-1 bg-red-500 text-white py-2 px-3 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
-                      >
-                        <Trash2 className="h-3 w-3 mr-1 inline" />
-                        Delete
-                      </button>
-                    </div>
+                   <div className="flex gap-2 mt-4">
+  <button
+    onClick={() => handleSessionClick(session)}
+    className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+  >
+    <Eye className="h-3 w-3 mr-1 inline" />
+    View
+  </button>
+  <button
+    onClick={(e) => {
+      e.stopPropagation(); // Add this line
+      handleEditSession(session);
+    }}
+    className="flex-1 bg-blue-500 text-white py-2 px-3 rounded-lg hover:bg-blue-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+  >
+    Edit
+  </button>
+  <button
+    onClick={(e) => {
+      e.stopPropagation(); // Add this line
+      handleDeleteSession(session);
+    }}
+    className="flex-1 bg-red-500 text-white py-2 px-3 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+  >
+    <Trash2 className="h-3 w-3 mr-1 inline" />
+    Delete
+  </button>
+</div>
                   </div>
                 ))}
               </div>
@@ -3054,28 +3141,34 @@ export function AdminPanel() {
                       </span>
                     </div>
                     
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleEventClick(event)}
-                        className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
-                      >
-                        <Eye className="h-3 w-3 mr-1 inline" />
-                        View
-                      </button>
-                      <button
-                        onClick={() => handleEditEvent(event)}
-                        className="flex-1 bg-green-500 text-white py-2 px-3 rounded-lg hover:bg-green-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteEvent(event)}
-                        className="flex-1 bg-red-500 text-white py-2 px-3 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
-                      >
-                        <Trash2 className="h-3 w-3 mr-1 inline" />
-                        Delete
-                      </button>
-                    </div>
+                   <div className="flex gap-2">
+  <button
+    onClick={() => handleEventClick(event)}
+    className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+  >
+    <Eye className="h-3 w-3 mr-1 inline" />
+    View
+  </button>
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      handleEditEvent(event);
+    }}
+    className="flex-1 bg-green-500 text-white py-2 px-3 rounded-lg hover:bg-green-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+  >
+    Edit
+  </button>
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      handleDeleteEvent(event);
+    }}
+    className="flex-1 bg-red-500 text-white py-2 px-3 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+  >
+    <Trash2 className="h-3 w-3 mr-1 inline" />
+    Delete
+  </button>
+</div>
                   </div>
                 ))}
               </div>
@@ -3309,67 +3402,74 @@ export function AdminPanel() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 stagger-children">
-                  {(openRecruitmentDay === 4 ? day4Bookings : day5Bookings).map((booking) => (
-                    <div 
-                      key={booking.id} 
-                      onClick={() => handleBookingClick(booking)}
-                      className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 hover:shadow-md transition-all duration-300 smooth-hover card-hover fade-in-blur cursor-pointer"
-                    >
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                            <User className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600" />
-                          </div>
-                          <div>
-                            <h3 className="font-semibold text-gray-900 text-sm sm:text-base">
-                              {booking.user?.first_name} {booking.user?.last_name}
-                            </h3>
-                            <p className="text-xs sm:text-sm text-gray-500">{booking.user?.personal_id}</p>
-                          </div>
-                        </div>
-                      </div>
+                {(openRecruitmentDay === 4 ? day4Bookings : day5Bookings).map((booking) => (
+  <div 
+    key={booking.id} 
+    onClick={() => handleBookingClick(booking)}
+    className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 hover:shadow-md transition-all duration-300 smooth-hover card-hover fade-in-blur cursor-pointer"
+  >
+    <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center space-x-3">
+        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-100 rounded-full flex items-center justify-center">
+          <User className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600" />
+        </div>
+        <div>
+          <h3 className="font-semibold text-gray-900 text-sm sm:text-base">
+            {booking.user?.first_name} {booking.user?.last_name}
+          </h3>
+          <p className="text-xs sm:text-sm text-gray-500">
+            {booking.user?.personal_id} • {booking.user?.faculty}
+          </p>
+        </div>
+      </div>
+    </div>
 
-                      <div className="space-y-2 text-xs sm:text-sm text-gray-600">
-                        <div className="flex items-center">
-                          <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
-                          <span>Booked: {new Date(booking.scanned_at).toLocaleDateString()}</span>
-                        </div>
-                        <div className="flex items-center">
-                          <Clock className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
-                          <span>{new Date(booking.scanned_at).toLocaleTimeString()}</span>
-                        </div>
-                        {booking.session && (
-                          <div className="flex items-center">
-                            <BookOpen className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
-                            <span className="font-medium text-xs sm:text-sm">{booking.session.title}</span>
-                          </div>
-                        )}
-                      </div>
+    <div className="space-y-2 text-xs sm:text-sm text-gray-600">
+      <div className="flex items-center">
+        <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+        <span>
+          Session: {booking.session?.title}
+        </span>
+      </div>
+      <div className="flex items-center">
+        <Clock className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+        <span>
+          {new Date(booking.session?.start_time || booking.scanned_at).toLocaleDateString()} at {' '}
+          {new Date(booking.session?.start_time || booking.scanned_at).toLocaleTimeString()}
+        </span>
+      </div>
+      {booking.session?.speaker && (
+        <div className="flex items-center">
+          <User className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+          <span>Speaker: {booking.session.speaker}</span>
+        </div>
+      )}
+    </div>
 
-                      <div className="flex gap-2 mt-4">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleBookingClick(booking);
-                          }}
-                          className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
-                        >
-                          <Eye className="h-3 w-3 mr-1 inline" />
-                          View
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openDeleteBookingModal(booking);
-                          }}
-                          className="flex-1 bg-red-500 text-white py-2 px-3 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
-                        >
-                          <Trash2 className="h-3 w-3 mr-1 inline" />
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+    <div className="flex gap-2 mt-4">
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          handleBookingClick(booking);
+        }}
+        className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+      >
+        <Eye className="h-3 w-3 mr-1 inline" />
+        View
+      </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          openDeleteBookingModal(booking);
+        }}
+        className="flex-1 bg-red-500 text-white py-2 px-3 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+      >
+        <Trash2 className="h-3 w-3 mr-1 inline" />
+        Delete
+      </button>
+    </div>
+  </div>
+))}
                 </div>
               )}
 
@@ -3564,11 +3664,307 @@ export function AdminPanel() {
   </div>,
   document.body
 )}
+{/* Edit Event Modal */}
+          {editEventModal && selectedEventEdit && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
+    <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
+      <div className="flex items-center justify-between mb-4 sm:mb-6 fade-in-blur">
+        <h3 className="text-xl sm:text-2xl font-bold text-gray-900">Edit Event</h3>
+        <button
+          onClick={() => setEditEventModal(false)}
+          className="text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          <X className="h-5 w-5 sm:h-6 sm:w-6" />
+        </button>
+      </div>
+      
+      <div className="space-y-4 stagger-children">
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Event Title *
+          </label>
+          <input
+            type="text"
+            value={editEvent.title}
+            onChange={(e) => setEditEvent({ ...editEvent, title: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter event title"
+          />
+        </div>
+
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Description
+          </label>
+          <textarea
+            value={editEvent.description}
+            onChange={(e) => setEditEvent({ ...editEvent, description: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter event description"
+            rows={3}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 fade-in-blur">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Start Date *
+            </label>
+            <input
+              type="date"
+              value={editEvent.startDate}
+              onChange={(e) => setEditEvent({ ...editEvent, startDate: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Start Time *
+            </label>
+            <input
+              type="time"
+              value={editEvent.startTime}
+              onChange={(e) => setEditEvent({ ...editEvent, startTime: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 fade-in-blur">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              End Date
+            </label>
+            <input
+              type="date"
+              value={editEvent.endDate}
+              onChange={(e) => setEditEvent({ ...editEvent, endDate: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              End Time
+            </label>
+            <input
+              type="time"
+              value={editEvent.endTime}
+              onChange={(e) => setEditEvent({ ...editEvent, endTime: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            />
+          </div>
+        </div>
+
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Location
+          </label>
+          <input
+            type="text"
+            value={editEvent.location}
+            onChange={(e) => setEditEvent({ ...editEvent, location: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter location"
+          />
+        </div>
+
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Event Type
+          </label>
+          <select
+            value={editEvent.type}
+            onChange={(e) => setEditEvent({ ...editEvent, type: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+          >
+            <option value="general">General</option>
+            <option value="keynote">Keynote</option>
+            <option value="workshop">Workshop</option>
+            <option value="networking">Networking</option>
+            <option value="ceremony">Ceremony</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
+        <button
+          onClick={() => setEditEventModal(false)}
+          className="px-4 sm:px-6 py-2 sm:py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover font-medium text-sm"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleEventUpdate}
+          disabled={loading}
+          className="px-4 sm:px-6 py-2 sm:py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 transition-all duration-300 smooth-hover font-medium text-sm"
+        >
+          {loading ? (
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-white mr-2"></div>
+              Updating...
+            </div>
+          ) : (
+            'Update Event'
+          )}
+        </button>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
+
+{/* Edit Session Modal */}
+{editSessionModal && selectedSessionEdit && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
+    <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
+      <div className="flex items-center justify-between mb-4 sm:mb-6 fade-in-blur">
+        <h3 className="text-xl sm:text-2xl font-bold text-gray-900">Edit Session</h3>
+        <button
+          onClick={() => setEditSessionModal(false)}
+          className="text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          <X className="h-5 w-5 sm:h-6 sm:w-6" />
+        </button>
+      </div>
+      
+      <div className="space-y-4 stagger-children">
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Session Title *
+          </label>
+          <input
+            type="text"
+            value={editSession.title}
+            onChange={(e) => setEditSession({ ...editSession, title: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter session title"
+          />
+        </div>
+
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Description
+          </label>
+          <textarea
+            value={editSession.description}
+            onChange={(e) => setEditSession({ ...editSession, description: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter session description"
+            rows={3}
+          />
+        </div>
+
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Speaker *
+          </label>
+          <input
+            type="text"
+            value={editSession.speaker}
+            onChange={(e) => setEditSession({ ...editSession, speaker: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter speaker name"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 fade-in-blur">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Date *
+            </label>
+            <input
+              type="date"
+              value={editSession.date}
+              onChange={(e) => setEditSession({ ...editSession, date: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Time *
+            </label>
+            <input
+              type="time"
+              value={editSession.hour}
+              onChange={(e) => setEditSession({ ...editSession, hour: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            />
+          </div>
+        </div>
+
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Location
+          </label>
+          <input
+            type="text"
+            value={editSession.location}
+            onChange={(e) => setEditSession({ ...editSession, location: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter location"
+          />
+        </div>
+
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Capacity
+          </label>
+          <input
+            type="number"
+            value={editSession.capacity}
+            onChange={(e) => setEditSession({ ...editSession, capacity: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter capacity (leave empty for unlimited)"
+          />
+        </div>
+
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Session Type *
+          </label>
+          <select
+            value={editSession.type}
+            onChange={(e) => setEditSession({ ...editSession, type: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+          >
+            <option value="session">Session</option>
+            <option value="mentorship">Mentorship</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
+        <button
+          onClick={() => setEditSessionModal(false)}
+          className="px-4 sm:px-6 py-2 sm:py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-300 smooth-hover font-medium text-sm"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSessionUpdate}
+          disabled={loading}
+          className="px-4 sm:px-6 py-2 sm:py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-all duration-300 smooth-hover font-medium text-sm"
+        >
+          {loading ? (
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-white mr-2"></div>
+              Updating...
+            </div>
+          ) : (
+            'Update Session'
+          )}
+        </button>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
+
 
 {/* Booking Detail Modal */}
 {showBookingModal && selectedBooking && createPortal(
   <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
-    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
       <div className="p-4 sm:p-6 stagger-children">
         <div className="flex items-center justify-between mb-4 sm:mb-6 fade-in-blur">
           <h2 className="text-lg sm:text-xl font-bold text-gray-900">Booking Details</h2>
@@ -3583,54 +3979,81 @@ export function AdminPanel() {
           </button>
         </div>
 
-        <div className="space-y-4 sm:space-y-6 fade-in-blur">
+        <div className="space-y-6 fade-in-blur">
           {/* User Information */}
-          <div className="text-center">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
-              <User className="h-6 w-6 sm:h-10 sm:w-10 text-orange-600" />
-            </div>
-            <h3 className="text-xl sm:text-2xl font-bold text-gray-900">
-              {selectedBooking.user?.first_name} {selectedBooking.user?.last_name}
+          <div className="bg-gray-50 rounded-lg p-4 sm:p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <User className="h-5 w-5 mr-2" />
+              User Information
             </h3>
-            <p className="text-gray-600 mt-2 text-sm sm:text-base">{selectedBooking.user?.email}</p>
-            <div className="inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium bg-blue-100 text-blue-800 mt-2">
-              Personal ID: {selectedBooking.user?.personal_id}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+              <div>
+                <label className="font-medium text-gray-700">Full Name:</label>
+                <p className="text-gray-900">{selectedBooking.user?.first_name} {selectedBooking.user?.last_name}</p>
+              </div>
+              <div>
+                <label className="font-medium text-gray-700">Personal ID:</label>
+                <p className="text-gray-900">{selectedBooking.user?.personal_id}</p>
+              </div>
+              <div>
+                <label className="font-medium text-gray-700">Email:</label>
+                <p className="text-gray-900">{selectedBooking.user?.email}</p>
+              </div>
+              <div>
+                <label className="font-medium text-gray-700">Gender:</label>
+                <p className="text-gray-900 capitalize">{selectedBooking.user?.gender || 'Not specified'}</p>
+              </div>
+              <div>
+                <label className="font-medium text-gray-700">University:</label>
+                <p className="text-gray-900">{selectedBooking.user?.university || 'Not specified'}</p>
+              </div>
+              <div>
+                <label className="font-medium text-gray-700">Faculty:</label>
+                <p className="text-gray-900">{selectedBooking.user?.faculty || 'Not specified'}</p>
+              </div>
             </div>
           </div>
 
           {/* Session Information */}
           {selectedBooking.session && (
-            <div className="fade-in-blur">
-              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                <BookOpen className="h-4 w-4 mr-2" />
-                Session Details
-              </label>
-              <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
-                <h4 className="font-semibold text-gray-900 text-sm sm:text-base">{selectedBooking.session.title}</h4>
+            <div className="bg-gray-50 rounded-lg p-4 sm:p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <BookOpen className="h-5 w-5 mr-2" />
+                Session Information
+              </h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="font-medium text-gray-700">Session Title:</label>
+                  <p className="text-gray-900 text-lg font-semibold">{selectedBooking.session.title}</p>
+                </div>
                 {selectedBooking.session.description && (
-                  <p className="text-gray-600 mt-1 text-xs sm:text-sm">{selectedBooking.session.description}</p>
+                  <div>
+                    <label className="font-medium text-gray-700">Description:</label>
+                    <p className="text-gray-900">{selectedBooking.session.description}</p>
+                  </div>
                 )}
-                {selectedBooking.session.speaker && (
-                  <p className="text-gray-700 mt-2 text-xs sm:text-sm">
-                    <strong>Speaker:</strong> {selectedBooking.session.speaker}
-                  </p>
-                )}
-                <div className="grid grid-cols-2 gap-3 sm:gap-4 mt-3 text-xs sm:text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <strong>Date:</strong><br />
-                    {new Date(selectedBooking.session.start_time).toLocaleDateString()}
+                    <label className="font-medium text-gray-700">Date:</label>
+                    <p className="text-gray-900">
+                      {new Date(selectedBooking.session.start_time).toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </p>
                   </div>
                   <div>
-                    <strong>Time:</strong><br />
-                    {new Date(selectedBooking.session.start_time).toLocaleTimeString()} - {new Date(selectedBooking.session.end_time).toLocaleTimeString()}
+                    <label className="font-medium text-gray-700">Time:</label>
+                    <p className="text-gray-900">
+                      {new Date(selectedBooking.session.start_time).toLocaleTimeString()} - {' '}
+                      {new Date(selectedBooking.session.end_time).toLocaleTimeString()}
+                    </p>
                   </div>
                   <div>
-                    <strong>Location:</strong><br />
-                    {selectedBooking.session.location}
-                  </div>
-                  <div>
-                    <strong>Type:</strong><br />
-                    {selectedBooking.session.session_type}
+                    <label className="font-medium text-gray-700">Location:</label>
+                    <p className="text-gray-900">{selectedBooking.session.location}</p>
                   </div>
                 </div>
               </div>
@@ -3638,55 +4061,58 @@ export function AdminPanel() {
           )}
 
           {/* Booking Information */}
-          <div className="fade-in-blur">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Booking Information</label>
-            <div className="grid grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
+          <div className="bg-gray-50 rounded-lg p-4 sm:p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Booking Information</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div>
-                <strong>Booked On:</strong><br />
-                {new Date(selectedBooking.scanned_at).toLocaleDateString()}
+                <label className="font-medium text-gray-700">Booked On:</label>
+                <p className="text-gray-900">
+                  {new Date(selectedBooking.scanned_at).toLocaleDateString()}
+                </p>
               </div>
               <div>
-                <strong>Booked At:</strong><br />
-                {new Date(selectedBooking.scanned_at).toLocaleTimeString()}
+                <label className="font-medium text-gray-700">Booked At:</label>
+                <p className="text-gray-900">
+                  {new Date(selectedBooking.scanned_at).toLocaleTimeString()}
+                </p>
               </div>
               <div>
-                <strong>Booking ID:</strong><br />
-                <code className="text-xs">{selectedBooking.id}</code>
+                <label className="font-medium text-gray-700">Booking ID:</label>
+                <p className="text-gray-900 font-mono text-xs">{selectedBooking.id}</p>
               </div>
               <div>
-                <strong>Scan Type:</strong><br />
-                {selectedBooking.scan_type}
+                <label className="font-medium text-gray-700">Scan Type:</label>
+                <p className="text-gray-900 capitalize">{selectedBooking.scan_type}</p>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Action Buttons */}
-          <div className="pt-4 space-y-3 fade-in-blur">
-            <button
-              onClick={() => openDeleteBookingModal(selectedBooking)}
-              className="w-full bg-red-500 text-white py-2 sm:py-3 px-4 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover font-medium text-sm sm:text-base"
-            >
-              <Trash2 className="h-4 w-4 mr-2 inline" />
-              Delete Booking
-            </button>
-            
-            <button
-              onClick={() => {
-                setShowBookingModal(false);
-                setSelectedBooking(null);
-              }}
-              className="w-full bg-gray-100 text-gray-700 py-2 sm:py-3 px-4 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover font-medium text-sm sm:text-base"
-            >
-              Close Details
-            </button>
-          </div>
+        {/* Action Buttons */}
+        <div className="pt-6 space-y-3 fade-in-blur">
+          <button
+            onClick={() => openDeleteBookingModal(selectedBooking)}
+            className="w-full bg-red-500 text-white py-3 px-4 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover font-medium"
+          >
+            <Trash2 className="h-4 w-4 mr-2 inline" />
+            Delete Booking
+          </button>
+          
+          <button
+            onClick={() => {
+              setShowBookingModal(false);
+              setSelectedBooking(null);
+            }}
+            className="w-full bg-gray-100 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover font-medium"
+          >
+            Close Details
+          </button>
         </div>
       </div>
     </div>
   </div>,
   document.body
 )}
-
 {/* Delete Booking Confirmation Modal */}
 {deleteBookingModal && selectedBooking && createPortal(
   <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
@@ -4638,21 +5064,19 @@ export function AdminPanel() {
           />
         </div>
 
-        <div className="fade-in-blur">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Session Type
-          </label>
-          <select
-            value={newSession.type}
-            onChange={(e) => setNewSession({ ...newSession, type: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
-          >
-            <option value="session">Session</option>
-            <option value="workshop">Workshop</option>
-            <option value="keynote">Keynote</option>
-            <option value="panel">Panel Discussion</option>
-          </select>
-        </div>
+<div className="fade-in-blur">
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    Session Type
+  </label>
+  <select
+    value={newSession.type}
+    onChange={(e) => setNewSession({ ...newSession, type: e.target.value })}
+    className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+  >
+    <option value="session">Session</option>
+    <option value="mentorship">Mentorship</option>
+  </select>
+</div>
       </div>
 
       <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
