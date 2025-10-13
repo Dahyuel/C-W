@@ -94,7 +94,8 @@ const DAY3_FACULTIES = [
   "Faculty of Archaeology", 
   "Faculty of Law",
   "Faculty of Education",
-  "Faculty of Arts"
+  "Faculty of Arts",
+  "Faculty of Girls"
 ];
 
 // Open Recruitment Days faculties (keep existing)
@@ -104,15 +105,12 @@ const DAY4_FACULTIES = [
 ];
 
 const DAY5_FACULTIES = [
-  "Faculty of Commerce",
   "Faculty of Business Administration",
   "Faculty of Arts",
   "Faculty of Law",
-  "Faculty of Applied Arts",
-  "Faculty of Fine Arts",
   "Faculty of Languages",
-  "Faculty of Physical Education",
-  "Faculty of Education"
+  "Faculty of Education",
+  "Faculty of Alsun",
 ];
 
 const AttendeeDashboard: React.FC = () => {
@@ -614,12 +612,12 @@ const AttendeeDashboard: React.FC = () => {
   const canBookBuildingSession = (session: Session): { canBook: boolean; reason?: string } => {
     const sessionDay = session.day || getDayFromDate(session.start_time);
     
-    if (sessionDay === 1 && !canBookDay1) {
-      return { 
-        canBook: false, 
-        reason: "This session is only available for Faculty of Engineering, Faculty of Computer and Information Sciences, and Faculty of Archaeology students" 
-      };
-    }
+if (sessionDay === 1 && !canBookDay1) {
+  return { 
+    canBook: false, 
+    reason: "This session is only available for Faculty of Engineering, Faculty of Computer and Information Sciences, Faculty of Archaeology" 
+  };
+}
     
     if (sessionDay === 2 && !canBookDay2) {
       return { 
@@ -628,12 +626,12 @@ const AttendeeDashboard: React.FC = () => {
       };
     }
     
-    if (sessionDay === 3 && !canBookDay3) {
-      return { 
-        canBook: false, 
-        reason: "This session is only available for Faculty of Alsun, Faculty of Archaeology, Faculty of Law, Faculty of Education, and Faculty of Arts students" 
-      };
-    }
+if (sessionDay === 3 && !canBookDay3) {
+  return { 
+    canBook: false, 
+    reason: "This session is only available for Faculty of Alsun, Faculty of Archaeology, Faculty of Law, Faculty of Education, Faculty of Arts, and Faculty of Girls students" 
+  };
+}
     
     return { canBook: true };
   };
@@ -649,12 +647,12 @@ const AttendeeDashboard: React.FC = () => {
       };
     }
     
-    if (sessionDay === 5 && !canBookDay5) {
-      return { 
-        canBook: false, 
-        reason: "This session is only available for Commerce, Business, Arts, Law, Applied Arts, Fine Arts, Languages, Physical Education, and Education students" 
-      };
-    }
+if (sessionDay === 5 && !canBookDay5) {
+  return { 
+    canBook: false, 
+    reason: "This session is only available for Business Administration, Arts, Law, Languages, Education, and Alsun students" 
+  };
+}
     
     return { canBook: true };
   };
@@ -1271,15 +1269,15 @@ const tabItems = [
                   <BookOpen className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500 mr-2 sm:mr-3 mt-0.5 flex-shrink-0" />
                   <div>
                     <h3 className="text-blue-800 font-medium text-sm sm:text-base mb-1">Faculty-Based Eligibility</h3>
-                    <p className="text-blue-700 text-xs sm:text-sm">
-                      {activeBuildingDay === 1 ? (
-                        <>Day 1 sessions are only available for <strong>Faculty of Engineering, Faculty of Computer and Information Sciences, and Faculty of Archaeology</strong> students.</>
-                      ) : activeBuildingDay === 2 ? (
-                        <>Day 2 sessions are only available for <strong>Faculty of Business Administration</strong> students.</>
-                      ) : (
-                        <>Day 3 sessions are only available for <strong>Faculty of Alsun, Faculty of Archaeology, Faculty of Law, Faculty of Education, and Faculty of Arts</strong> students.</>
-                      )}
-                    </p>
+               <p className="text-blue-700 text-xs sm:text-sm">
+  {activeBuildingDay === 1 ? (
+    <>Day 1 sessions are only available for <strong>Faculty of Engineering, Faculty of Computer and Information Sciences, Faculty of Archaeology, and Faculty of Girls</strong> students.</>
+  ) : activeBuildingDay === 2 ? (
+    <>Day 2 sessions are only available for <strong>Faculty of Business Administration</strong> students.</>
+  ) : (
+    <>Day 3 sessions are only available for <strong>Faculty of Alsun, Faculty of Archaeology, Faculty of Law, Faculty of Education, Faculty of Arts, and Faculty of Girls</strong> students.</>
+  )}
+</p>
                     {profile?.faculty && (
                       <p className="text-blue-600 text-xs sm:text-sm mt-1">
                         Your faculty: <strong>{profile.faculty}</strong> - {
@@ -1353,13 +1351,13 @@ const tabItems = [
                   <BookOpen className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500 mr-2 sm:mr-3 mt-0.5 flex-shrink-0" />
                   <div>
                     <h3 className="text-blue-800 font-medium text-sm sm:text-base mb-1">Faculty-Based Eligibility</h3>
-                    <p className="text-blue-700 text-xs sm:text-sm">
-                      {activeRecruitmentDay === 4 ? (
-                        <>Day 4 sessions are only available for <strong>Faculty of Engineering</strong> and <strong>Faculty of Computer and Information Sciences</strong> students.</>
-                      ) : (
-                        <>Day 5 sessions are only available for <strong>Commerce, Business, Arts, Law, Applied Arts, Fine Arts, Languages, Physical Education, and Education</strong> students.</>
-                      )}
-                    </p>
+<p className="text-blue-700 text-xs sm:text-sm">
+  {activeRecruitmentDay === 4 ? (
+    <>Day 4 sessions are only available for <strong>Faculty of Engineering</strong> and <strong>Faculty of Computer and Information Sciences</strong> students.</>
+  ) : (
+    <>Day 5 sessions are only available for <strong>Business Administration, Arts, Law, Languages, Education, and Alsun</strong> students.</>
+  )}
+</p>
                     {profile?.faculty && (
                       <p className="text-blue-600 text-xs sm:text-sm mt-1">
                         Your faculty: <strong>{profile.faculty}</strong> - {
