@@ -7,6 +7,7 @@ import {
   X,
   AlertCircle,
   CheckCircle,
+  AlertTriangle,
 } from "lucide-react";
 import DashboardLayout from '../../components/shared/DashboardLayout';
 import { QRScanner } from "../../components/shared/QRScanner";
@@ -16,7 +17,7 @@ import {
   processAttendance, 
   getAttendeeByPersonalId,
   getAttendeeByUUID,
-  searchAttendeesByPersonalId // New function we'll add
+  searchAttendeesByPersonalId
 } from "../../lib/supabase";
 
 interface Attendee {
@@ -31,13 +32,21 @@ interface Attendee {
   faculty?: string;
   current_status?: 'inside' | 'outside';
   last_scan?: string;
+  event_entry?: boolean;
+  profile_complete?: boolean;
+  authorized?: boolean; // Add this line
 }
 
 const castToAttendee = (data: any): Attendee => {
+  console.log('Casting attendee data:', data);
+  console.log('Authorization field from DB:', data.authorized, 'Type:', typeof data.authorized);
+  
   return {
     ...data,
-    // For registration dashboard, current_status should reflect event entry
-    current_status: data.event_entry ? 'inside' : 'outside'
+    current_status: data.event_entry ? 'inside' : 'outside',
+    event_entry: data.event_entry || false,
+    profile_complete: data.profile_complete !== undefined ? data.profile_complete : true,
+    authorized: data.authorized !== undefined ? data.authorized : true // Changed from true to false
   } as Attendee;
 };
 
@@ -60,6 +69,9 @@ export const RegTeamDashboard: React.FC = () => {
   const [showAttendeeCard, setShowAttendeeCard] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
+  // Validation state
+  const [validationError, setValidationError] = useState<string | null>(null);
+
   // Feedback state
   const [feedback, setFeedback] = useState<{
     type: 'success' | 'error';
@@ -75,7 +87,7 @@ export const RegTeamDashboard: React.FC = () => {
     if (searchTerm.trim().length >= 2) {
       const timeout = setTimeout(() => {
         performDynamicSearch(searchTerm.trim());
-      }, 300); // 300ms debounce
+      }, 300);
 
       setSearchTimeout(timeout);
     } else {
@@ -99,6 +111,7 @@ export const RegTeamDashboard: React.FC = () => {
         console.error("Search error:", error);
         setSearchResults([]);
       } else {
+        console.log('Search results:', data);
         const attendees = (data || []).map(item => castToAttendee(item));
         setSearchResults(attendees);
         setShowSearchResults(true);
@@ -116,6 +129,42 @@ export const RegTeamDashboard: React.FC = () => {
     setTimeout(() => setFeedback(null), 5000);
   };
 
+const validateAttendee = (attendee: any): { isValid: boolean; error?: string } => {
+  console.log('Validating attendee:', attendee);
+  console.log('Authorization value:', attendee.authorized, 'Type:', typeof attendee.authorized);
+  
+  // Check if role is attendee
+  if (attendee.role !== 'attendee') {
+    return {
+      isValid: false,
+      error: 'Only attendees can be processed through this system'
+    };
+  }
+
+  // Check if profile is complete
+  const profileComplete = attendee.profile_complete === true;
+  console.log('Profile complete status:', attendee.profile_complete, 'parsed as:', profileComplete);
+  
+  if (!profileComplete) {
+    return {
+      isValid: false,
+      error: 'This attendee has not completed their profile and cannot enter the event'
+    };
+  }
+
+  // Check if attendee is authorized - strict boolean check
+  const isAuthorized = attendee.authorized === true;
+  console.log('Authorization status:', attendee.authorized, 'parsed as:', isAuthorized);
+  
+  if (!isAuthorized) {
+    return {
+      isValid: false,
+      error: 'This attendee is not authorized to enter the event'
+    };
+  }
+
+  return { isValid: true };
+};
   // Check if a string is a UUID format
   const isUUID = (str: string): boolean => {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -130,18 +179,30 @@ export const RegTeamDashboard: React.FC = () => {
 
     try {
       setSearchLoading(true);
+      setValidationError(null);
+      
       const { data, error } = await getAttendeeByPersonalId(searchTerm.trim());
 
       if (error || !data) {
         showFeedback('error', 'Personal ID not found');
-      } else if (data.role !== 'attendee') {
-        showFeedback('error', 'Only attendees can be processed through this system');
-      } else {
-        setSelectedAttendee(castToAttendee(data));
-        setShowAttendeeCard(true);
-        setSearchTerm("");
-        setShowSearchResults(false);
+        return;
       }
+
+      console.log('Found attendee data:', data);
+
+      // Validate attendee
+      const validation = validateAttendee(data);
+      if (!validation.isValid) {
+        setValidationError(validation.error || 'Validation failed');
+        showFeedback('error', validation.error || 'Validation failed');
+        return;
+      }
+
+      setSelectedAttendee(castToAttendee(data));
+      setShowAttendeeCard(true);
+      setSearchTerm("");
+      setShowSearchResults(false);
+      
     } catch (error) {
       console.error("Search exception:", error);
       showFeedback('error', 'Search failed. Please try again.');
@@ -151,16 +212,28 @@ export const RegTeamDashboard: React.FC = () => {
   };
 
   const handleSelectSearchResult = (attendee: Attendee) => {
+    console.log('Selected attendee from search:', attendee);
+    
+    // Validate attendee before selection
+    const validation = validateAttendee(attendee);
+    if (!validation.isValid) {
+      setValidationError(validation.error || 'Validation failed');
+      showFeedback('error', validation.error || 'Validation failed');
+      return;
+    }
+
     setSelectedAttendee(attendee);
     setShowAttendeeCard(true);
     setSearchTerm("");
     setShowSearchResults(false);
     setSearchResults([]);
+    setValidationError(null);
   };
 
   const handleQRScan = async (qrData: string) => {
     try {
       console.log('Processing QR data:', qrData);
+      setValidationError(null);
       
       let attendeeData: Attendee | null = null;
       let error;
@@ -186,74 +259,95 @@ export const RegTeamDashboard: React.FC = () => {
         return;
       }
 
-      // Check if the person is an attendee
-      if (attendeeData.role !== 'attendee') {
-        showFeedback('error', 'Only attendees can be processed through this system');
+      console.log('Found attendee from QR scan:', attendeeData);
+
+      // Validate attendee
+      const validation = validateAttendee(attendeeData);
+      if (!validation.isValid) {
+        setValidationError(validation.error || 'Validation failed');
+        showFeedback('error', validation.error || 'Validation failed');
         return;
       }
 
       setSelectedAttendee(attendeeData);
       setShowAttendeeCard(true);
+      setValidationError(null);
       
-      // DON'T close scanner immediately - let QRScanner handle it
-      // The QRScanner component will close itself after showing success feedback
     } catch (error) {
       console.error("QR scan error:", error);
       showFeedback('error', 'Failed to process QR code');
     }
   };
 
-  // Handle scanner close - this ensures camera stops properly
+  // Handle scanner close
   const handleScannerClose = () => {
     console.log('Scanner closing from parent...');
     setShowScanner(false);
   };
 
-  const handleAttendanceAction = async (action: 'enter' | 'exit') => {
-    if (!selectedAttendee) return;
+const handleAttendanceAction = async (action: 'enter' | 'exit') => {
+  if (!selectedAttendee) return;
 
-    try {
-      setActionLoading(true);
-      const { data, error } = await processAttendance(selectedAttendee.personal_id, action);
-
-      if (error) {
-        showFeedback('error', error.message || `Failed to process ${action}`);
-        return;
-      }
-
-      showFeedback('success', data.message || `${action.toUpperCase()} scan successful!`);
-      
-      // Update attendee status
-      const newStatus = action === 'enter' ? 'inside' : 'outside';
-      setSelectedAttendee(prev => prev ? {
-        ...prev,
-        current_status: newStatus,
-        last_scan: new Date().toISOString()
-      } : null);
-
-      // Close attendee card after successful action
-      setTimeout(() => {
-        setShowAttendeeCard(false);
-        setSelectedAttendee(null);
-      }, 2000);
-
-    } catch (error) {
-      console.error("Attendance action error:", error);
-      showFeedback('error', `Failed to process ${action}`);
-    } finally {
-      setActionLoading(false);
+  try {
+    setActionLoading(true);
+    
+    // Double-check validation before processing
+    const validation = validateAttendee(selectedAttendee);
+    if (!validation.isValid) {
+      showFeedback('error', validation.error || 'Cannot process action: validation failed');
+      return;
     }
-  };
 
+    // Additional authorization check
+    const isAuthorized = selectedAttendee.authorized === true || selectedAttendee.authorized === 'true';
+    if (!isAuthorized) {
+      showFeedback('error', 'This attendee is not authorized to enter the event');
+      return;
+    }
+
+    const { data, error } = await processAttendance(selectedAttendee.personal_id, action);
+
+    if (error) {
+      showFeedback('error', error.message || `Failed to process ${action}`);
+      return;
+    }
+
+    showFeedback('success', data.message || `${action.toUpperCase()} scan successful!`);
+    
+    // Update attendee status
+    const newStatus = action === 'enter' ? 'inside' : 'outside';
+    const newEventEntry = action === 'enter';
+    
+    setSelectedAttendee(prev => prev ? {
+      ...prev,
+      current_status: newStatus,
+      event_entry: newEventEntry,
+      last_scan: new Date().toISOString()
+    } : null);
+
+    // Close attendee card after successful action
+    setTimeout(() => {
+      setShowAttendeeCard(false);
+      setSelectedAttendee(null);
+      setValidationError(null);
+    }, 2000);
+
+  } catch (error) {
+    console.error("Attendance action error:", error);
+    showFeedback('error', `Failed to process ${action}`);
+  } finally {
+    setActionLoading(false);
+  }
+};
   const clearSearch = () => {
     setSearchTerm("");
     setSearchResults([]);
     setShowSearchResults(false);
+    setValidationError(null);
   };
 
   // Close search results when clicking outside
   const handleSearchInputBlur = () => {
-    // Delay hiding to allow clicks on search results
     setTimeout(() => {
       setShowSearchResults(false);
     }, 200);
@@ -265,24 +359,34 @@ export const RegTeamDashboard: React.FC = () => {
       subtitle="Manage attendee registrations and check-ins"
     >
       {/* Feedback Toast */}
-      {feedback && (
-        <div className={`fixed top-4 right-4 z-50 flex items-center space-x-2 px-4 py-3 rounded-lg shadow-lg ${
-          feedback.type === 'success' 
-            ? 'bg-green-500 text-white' 
-            : 'bg-red-500 text-white'
-        }`}>
-          {feedback.type === 'success' ? (
-            <CheckCircle className="h-5 w-5" />
-          ) : (
-            <AlertCircle className="h-5 w-5" />
-          )}
-          <span className="font-medium">{feedback.message}</span>
-          <button
-            onClick={() => setFeedback(null)}
-            className="ml-2 hover:bg-black hover:bg-opacity-20 rounded p-1"
-          >
-            <X className="h-4 w-4" />
-          </button>
+     {feedback && (
+  <div className={`fixed top-4 right-4 z-[100] flex items-center space-x-2 px-4 py-3 rounded-lg shadow-lg ${
+    feedback.type === 'success' 
+      ? 'bg-green-500 text-white' 
+      : 'bg-red-500 text-white'
+  }`}>
+    {feedback.type === 'success' ? (
+      <CheckCircle className="h-5 w-5" />
+    ) : (
+      <AlertCircle className="h-5 w-5" />
+    )}
+    <span className="font-medium">{feedback.message}</span>
+    <button
+      onClick={() => setFeedback(null)}
+      className="ml-2 hover:bg-black hover:bg-opacity-20 rounded p-1"
+    >
+      <X className="h-4 w-4" />
+    </button>
+  </div>
+)}
+
+      {/* Validation Error Alert */}
+      {validationError && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="h-5 w-5 text-red-500" />
+            <span className="text-red-700 font-medium">{validationError}</span>
+          </div>
         </div>
       )}
 
@@ -370,6 +474,20 @@ export const RegTeamDashboard: React.FC = () => {
                                     {attendee.university}
                                   </p>
                                 )}
+                                {/* Show profile completion status */}
+                                {!attendee.profile_complete && (
+                                  <div className="flex items-center space-x-1 mt-1">
+                                    <AlertTriangle className="h-3 w-3 text-yellow-500" />
+                                    <span className="text-xs text-yellow-600">Profile Incomplete</span>
+                                  </div>
+                                )}
+                                {/* Show authorization status */}
+                                {!attendee.authorized && (
+                                  <div className="flex items-center space-x-1 mt-1">
+                                    <AlertTriangle className="h-3 w-3 text-red-500" />
+                                    <span className="text-xs text-red-600">Not Authorized</span>
+                                  </div>
+                                )}
                               </div>
                               <div className="text-right">
                                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -453,17 +571,24 @@ export const RegTeamDashboard: React.FC = () => {
         description="Point your camera at the attendee's QR code"
       />
 
-{/* Attendee Card Modal */}
+      {/* Attendee Card Modal */}
 <AttendeeCard
   isOpen={showAttendeeCard}
   onClose={() => {
     setShowAttendeeCard(false);
     setSelectedAttendee(null);
+    setValidationError(null);
   }}
   attendee={selectedAttendee}
   onAction={handleAttendanceAction}
   loading={actionLoading}
-  mode="registration" // This will show "Inside/Outside Event"
+  mode="registration"
+  // Pass validation info to the card
+  validationInfo={{
+    profileComplete: selectedAttendee?.profile_complete || false,
+    eventEntry: selectedAttendee?.event_entry || false,
+    authorized: selectedAttendee?.authorized || false // Add this line
+  }}
 />
     </DashboardLayout>
   );

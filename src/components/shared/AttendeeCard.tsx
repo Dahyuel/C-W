@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, UserCheck, UserX, Crown, Shield, Users, Phone, Mail, MapPin, Clock, UserPlus } from 'lucide-react';
+import { X, User, UserCheck, UserX, Crown, Shield, Users, Phone, Mail, MapPin, Clock, UserPlus, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { createPortal } from 'react-dom';
 
@@ -21,6 +21,8 @@ interface AttendeeCardProps {
     current_status?: 'inside' | 'outside' | 'inside_event' | 'outside_event';
     building_status?: 'inside_building' | 'outside_building';
     last_scan?: string;
+    profile_complete?: boolean;
+    authorized?: boolean;
   } | null;
   onAction: (action: 'enter' | 'exit') => Promise<void>;
   loading?: boolean;
@@ -28,6 +30,11 @@ interface AttendeeCardProps {
   sessionTitle?: string;
   disableAction?: boolean;
   disableReason?: string;
+  validationInfo?: {
+    profileComplete: boolean;
+    eventEntry: boolean;
+    authorized?: boolean;
+  };
 }
 
 const getRoleIcon = (role: string) => {
@@ -75,7 +82,8 @@ export const AttendeeCard: React.FC<AttendeeCardProps> = ({
   onAction,
   loading = false,
   mode = 'building',
-  sessionTitle
+  sessionTitle,
+  validationInfo
 }) => {
   const [actionLoading, setActionLoading] = useState<'enter' | 'exit' | null>(null);
   const [currentAttendee, setCurrentAttendee] = useState(attendee);
@@ -103,6 +111,8 @@ export const AttendeeCard: React.FC<AttendeeCardProps> = ({
               ...prev,
               building_entry: payload.new.building_entry,
               event_entry: payload.new.event_entry,
+              profile_complete: payload.new.profile_complete,
+              authorized: payload.new.authorized,
               building_status: payload.new.building_entry ? 'inside_building' : 'outside_building',
               current_status: payload.new.event_entry ? 'inside_event' : 'outside_event'
             } : null);
@@ -185,7 +195,97 @@ export const AttendeeCard: React.FC<AttendeeCardProps> = ({
     return isInside ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
   };
 
+  // Check if profile is complete - handle both boolean and string values
+  const isProfileComplete = validationInfo?.profileComplete !== undefined 
+    ? validationInfo.profileComplete 
+    : currentAttendee.profile_complete === true || currentAttendee.profile_complete === 'true';
+
+  // Check if attendee is authorized - handle both boolean and string values
+  const isAuthorized = validationInfo?.authorized !== undefined 
+    ? validationInfo.authorized 
+    : currentAttendee.authorized === true || currentAttendee.authorized === 'true';
+
   const getActionButtons = () => {
+    // Authorization check - show warning if not authorized
+    if (!isAuthorized) {
+      return (
+        <div className="pt-4 fade-in-blur">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 fade-in-blur">
+            <div className="flex items-center space-x-3">
+              <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-red-800">
+                  Not Authorized
+                </p>
+                <p className="text-sm text-red-600 mt-1">
+                  This attendee is not authorized to enter the event.
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          {/* Disabled action buttons */}
+          <div className="flex space-x-3 mt-4">
+            <button
+              disabled
+              className="flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg font-medium bg-gray-200 text-gray-400 cursor-not-allowed"
+            >
+              <UserCheck className="h-5 w-5" />
+              <span>Enter</span>
+            </button>
+
+            <button
+              disabled
+              className="flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg font-medium bg-gray-200 text-gray-400 cursor-not-allowed"
+            >
+              <UserX className="h-5 w-5" />
+              <span>Exit</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Profile completion check - show warning if profile is incomplete
+    if (!isProfileComplete) {
+      return (
+        <div className="pt-4 fade-in-blur">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 fade-in-blur">
+            <div className="flex items-center space-x-3">
+              <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-red-800">
+                  Profile Incomplete
+                </p>
+                <p className="text-sm text-red-600 mt-1">
+                  This attendee has not completed their profile and cannot enter the event.
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          {/* Disabled action buttons */}
+          <div className="flex space-x-3 mt-4">
+            <button
+              disabled
+              className="flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg font-medium bg-gray-200 text-gray-400 cursor-not-allowed"
+            >
+              <UserCheck className="h-5 w-5" />
+              <span>Enter</span>
+            </button>
+
+            <button
+              disabled
+              className="flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg font-medium bg-gray-200 text-gray-400 cursor-not-allowed"
+            >
+              <UserX className="h-5 w-5" />
+              <span>Exit</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     if (mode === 'session') {
       // Session mode: check building_entry status
       const canEnterSession = currentAttendee.building_entry;
@@ -366,6 +466,26 @@ export const AttendeeCard: React.FC<AttendeeCardProps> = ({
                     {formatRole(currentAttendee.role)}
                   </span>
                   
+                  {/* Profile completion status */}
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    isProfileComplete ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                  }`}>
+                    <span className={`inline-block w-2 h-2 rounded-full mr-1 ${
+                      isProfileComplete ? 'bg-green-500' : 'bg-red-500'
+                    }`}></span>
+                    {isProfileComplete ? 'Profile Complete' : 'Profile Incomplete'}
+                  </span>
+                  
+                  {/* Authorization status */}
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    isAuthorized ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                  }`}>
+                    <span className={`inline-block w-2 h-2 rounded-full mr-1 ${
+                      isAuthorized ? 'bg-green-500' : 'bg-red-500'
+                    }`}></span>
+                    {isAuthorized ? 'Authorized' : 'Not Authorized'}
+                  </span>
+                  
                   {/* Show both event and building status for building mode */}
                   {mode === 'building' && (
                     <>
@@ -461,13 +581,14 @@ export const AttendeeCard: React.FC<AttendeeCardProps> = ({
                 {mode === 'building' ? (
                   <p>
                     <strong>Building Entry Requirements:</strong><br/>
-                    1. Must be inside event first<br/>
-                    2. Must be outside building<br/>
+                    1. Must be authorized and profile complete<br/>
+                    2. Must be inside event first<br/>
+                    3. Must be outside building<br/>
                     <strong>Exit:</strong> Available when inside building
                   </p>
                 ) : (
                   <p>
-                    <strong>Enter:</strong> Available when outside event • 
+                    <strong>Enter:</strong> Available when outside event and authorized • 
                     <strong>Exit:</strong> Available when inside event
                   </p>
                 )}

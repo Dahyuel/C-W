@@ -16,11 +16,12 @@ type AuthContextType = {
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: any; redirectPath?: string }>;
   signOut: () => Promise<void>;
   hasRole: (roles: string | string[]) => boolean;
-  getRoleBasedRedirect: (role?: string, profileComplete?: boolean) => string;
+  getRoleBasedRedirect: (role?: string, profileComplete?: boolean, authorized?: boolean) => string;
   validateRegistration: (email: string, personalId: string, volunteerId?: string) => Promise<{ isValid: boolean; errors: string[] }>;
   refreshProfile: () => Promise<void>;
   clearAuthAction: () => void;
   isProfileComplete: (profile: any, role?: string) => boolean;
+  isUserAuthorized: () => boolean;
   getRegistrationState: () => any;
   setRegistrationState: (state: any) => void;
 };
@@ -299,15 +300,37 @@ useEffect(() => {
   };
 }, []); // Empty deps - only run once
 
+  // Check if user is authorized (only for attendees)
+  const isUserAuthorized = useCallback(() => {
+    if (!profile) return true; // No profile loaded yet, assume authorized
+
+    // Only check authorization for attendees
+    if (profile.role === 'attendee') {
+      // Only false means unauthorized, null/undefined/true means authorized
+      return profile.authorized !== false;
+    }
+
+    // All other roles are always authorized
+    return true;
+  }, [profile]);
+
   // Role-based redirect logic
-  const getRoleBasedRedirect = useCallback((role?: string, profileComplete?: boolean) => {
+  const getRoleBasedRedirect = useCallback((role?: string, profileComplete?: boolean, authorized?: boolean) => {
     const r = role || profile?.role;
     const isComplete = profileComplete ?? profile?.profile_complete;
-    
+    // Only false means unauthorized, null/undefined/true means authorized
+    const isAuthorized = authorized ?? (r === 'attendee' ? profile?.authorized !== false : true);
+
+    // Check authorization first (only for attendees)
+    if (r === 'attendee' && !isAuthorized) {
+      return '/unauthorized';
+    }
+
+    // Then check profile completion
     if (!isComplete) {
       return r === 'attendee' ? '/attendee-register' : '/V0lunt33ringR3g';
     }
-    
+
     const roleMap: Record<string, string> = {
       admin: '/secure-9821panel',
       sadmin: '/super-ctrl-92k1x',
@@ -397,31 +420,37 @@ useEffect(() => {
     try {
       setAuthActionLoading(true);
       setAuthActionMessage('Signing you in...');
-      
+
       const { data, error } = await signInUser(email, password);
-  
+
       if (error) {
         return { success: false, error };
       }
-  
+
       if (data?.user?.id) {
         setUser(data.user);
-        
+
         // Wait for profile fetch
         const userProfile = await fetchProfile(data.user.id);
-        
+
         setAuthActionMessage('Sign in successful!');
-        
+
+        // Check authorization for attendees
+        if (userProfile?.role === 'attendee' && userProfile?.authorized === false) {
+          return { success: false, error: { message: 'Account not authorized', unauthorized: true } };
+        }
+
         const redirectPath = getRoleBasedRedirect(
-          userProfile?.role, 
-          userProfile?.profile_complete
+          userProfile?.role,
+          userProfile?.profile_complete,
+          userProfile?.authorized
         );
-        
+
         return { success: true, redirectPath };
       }
-      
+
       return { success: true, redirectPath: '/V0lunt33ringR3g' };
-      
+
     } catch (error: any) {
       return { success: false, error: { message: error.message || 'Sign in failed' } };
     } finally {
@@ -491,6 +520,7 @@ useEffect(() => {
     refreshProfile,
     clearAuthAction,
     isProfileComplete,
+    isUserAuthorized,
     getRegistrationState: sessionHelpers.getRegistrationState,
     setRegistrationState: sessionHelpers.setRegistrationState,
   }), [
@@ -505,6 +535,7 @@ useEffect(() => {
     refreshProfile,
     clearAuthAction,
     isProfileComplete,
+    isUserAuthorized,
     sessionHelpers
   ]);
 

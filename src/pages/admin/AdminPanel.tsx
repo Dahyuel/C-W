@@ -35,6 +35,7 @@ interface StatsSummary {
   total_volunteers: number;
 }
 
+// In your types section, update the CompanyItem interface
 interface CompanyItem {
   id: string;
   name: string;
@@ -46,6 +47,8 @@ interface CompanyItem {
   created_at?: string;
   academic_faculties_seeking_for?: string[];
   vacancies_type?: string[];
+  days?: number[]; // Add this
+  hr_mails?: string[]; // Add this
 }
 
 // Add partner type order
@@ -92,6 +95,13 @@ const VACANCIES_TYPES = [
   'Internship',
   'Freelance',
   'Project Based'
+];
+const OPEN_RECRUITMENT_DAYS = [
+  { value: 1, label: 'Day 1 (19-10-2025)' },
+  { value: 2, label: 'Day 2 (20-10-2025)' },
+  { value: 3, label: 'Day 3 (21-10-2025)' },
+  { value: 4, label: 'Day 4 (22-10-2025)' },
+  { value: 5, label: 'Day 5 (23-10-2025)' }
 ];
 
 interface SessionItem {
@@ -238,6 +248,13 @@ export function AdminPanel() {
   
   // Mobile menu state
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const [selectedDays, setSelectedDays] = useState<number[]>([]);
+  const [hrEmails, setHrEmails] = useState<string[]>([]);
+  const [editSelectedDays, setEditSelectedDays] = useState<number[]>([]);
+  const [editHrEmails, setEditHrEmails] = useState<string[]>([]);
+  const [newHrEmail, setNewHrEmail] = useState<string>("");
+  const [editNewHrEmail, setEditNewHrEmail] = useState<string>("");
   
   const announcementRoleOptions = [
     { value: "", label: "Select Target" },
@@ -260,31 +277,36 @@ export function AdminPanel() {
     { value: "custom", label: "Custom Selection" }
   ];
   
-  const [editCompany, setEditCompany] = useState<{ 
-    id: string; 
-    name: string; 
-    logo: File | null; 
-    logoUrl: string; 
-    logoType: 'link' | 'upload'; 
-    description: string; 
-    website: string; 
-    boothNumber: string;
-    partnerType: string;
-    academicFaculties: string[];
-    vacanciesType: string[];
-  }>({
-    id: "",
-    name: "",
-    logo: null,
-    logoUrl: "",
-    logoType: "link",
-    description: "",
-    website: "",
-    boothNumber: "",
-    partnerType: "",
-    academicFaculties: [],
-    vacanciesType: [],
-  });
+// Update the editCompany state
+const [editCompany, setEditCompany] = useState<{ 
+  id: string; 
+  name: string; 
+  logo: File | null; 
+  logoUrl: string; 
+  logoType: 'link' | 'upload'; 
+  description: string; 
+  website: string; 
+  boothNumber: string;
+  partnerType: string;
+  academicFaculties: string[];
+  vacanciesType: string[];
+  days: number[]; // Add this
+  hrMails: string[]; // Add this
+}>({
+  id: "",
+  name: "",
+  logo: null,
+  logoUrl: "",
+  logoType: "link",
+  description: "",
+  website: "",
+  boothNumber: "",
+  partnerType: "",
+  academicFaculties: [],
+  vacanciesType: [],
+  days: [], // Add this
+  hrMails: [], // Add this
+});
 
   const [editSession, setEditSession] = useState<{ id: string; title: string; date: string; speaker: string; capacity: string | number; type: 'session' | string; hour: string; location: string; description: string;}>({
     id: "",
@@ -310,29 +332,34 @@ export function AdminPanel() {
     type: "general",
   });
   
-  const [newCompany, setNewCompany] = useState<{ 
-    name: string; 
-    logo: File | null; 
-    logoUrl: string; 
-    logoType: 'link' | 'upload'; 
-    description: string; 
-    website: string; 
-    boothNumber: string;
-    partnerType: string;
-    academicFaculties: string[];
-    vacanciesType: string[];
-  }>({
-    name: "",
-    logo: null,
-    logoUrl: "",
-    logoType: "link",
-    description: "",
-    website: "",
-    boothNumber: "",
-    partnerType: "",
-    academicFaculties: [],
-    vacanciesType: [],
-  });
+// Update the newCompany state
+const [newCompany, setNewCompany] = useState<{ 
+  name: string; 
+  logo: File | null; 
+  logoUrl: string; 
+  logoType: 'link' | 'upload'; 
+  description: string; 
+  website: string; 
+  boothNumber: string;
+  partnerType: string;
+  academicFaculties: string[];
+  vacanciesType: string[];
+  days: number[]; // Add this
+  hrMails: string[]; // Add this
+}>({
+  name: "",
+  logo: null,
+  logoUrl: "",
+  logoType: "link",
+  description: "",
+  website: "",
+  boothNumber: "",
+  partnerType: "",
+  academicFaculties: [],
+  vacanciesType: [],
+  days: [], // Add this
+  hrMails: [], // Add this
+});
 
   const [newSession, setNewSession] = useState<{ title: string; date: string; speaker: string; capacity: string | number; type: 'session' | string; hour: string; location: string; description: string;}>({
     title: "",
@@ -495,66 +522,66 @@ export function AdminPanel() {
 // Fetch Open Recruitment Day bookings using RPC
 // Enhanced fetch function with RPC and fallback
 // Fetch Open Recruitment Day bookings using RPC
+// Replace the fetchOpenRecruitmentBookings function with this:
 const fetchOpenRecruitmentBookings = async (day: number): Promise<AttendanceItem[]> => {
   try {
-    console.log(`Fetching bookings for Day ${day} using RPC...`);
+    console.log(`Fetching bookings for Day ${day} using direct query...`);
 
+    const day4SessionId = '30de32fb-1051-493a-a983-9f22394025f0';
+    const day5SessionId = '320259ad-117a-4e21-b74b-bfe493e3eea3';
+    
+    const targetSessionId = day === 4 ? day4SessionId : day5SessionId;
+
+    // Direct query to get bookings with user and session data
     const { data: bookings, error } = await supabase
-      .rpc('get_open_recruitment_bookings', { day_number: day });
+      .from('attendances')
+      .select(`
+        *,
+        user:users_profiles!attendances_user_id_fkey(
+          id,
+          first_name,
+          last_name,
+          personal_id,
+          email,
+          faculty,
+          university,
+          gender,
+          phone,
+          degree_level,
+          program,
+          class,
+          nationality,
+          role
+        ),
+        session:sessions!attendances_session_id_fkey(
+          id,
+          title,
+          description,
+          speaker,
+          start_time,
+          end_time,
+          location,
+          session_type,
+          capacity,
+          current_bookings
+        )
+      `)
+      .eq('scan_type', 'booking')
+      .eq('session_id', targetSessionId)
+      .order('scanned_at', { ascending: false });
 
     if (error) {
-      console.error(`RPC error for Day ${day}:`, error);
-      return await fetchOpenRecruitmentBookingsDirect(day);
+      console.error(`Direct query error for Day ${day}:`, error);
+      return [];
     }
 
-    console.log(`RPC returned ${bookings?.length || 0} bookings for Day ${day}`);
-
-    // Transform the data to match the expected format
-    const transformedBookings: AttendanceItem[] = (bookings || []).map(booking => ({
-      id: booking.attendance_id,
-      user_id: booking.user_id,
-      session_id: booking.session_id,
-      scan_type: booking.scan_type,
-      scanned_at: booking.scanned_at,
-      scanned_by: '', // Not available from RPC
-      location: null, // Not available from RPC
-      user: {
-        id: booking.user_id,
-        first_name: booking.first_name,
-        last_name: booking.last_name,
-        personal_id: booking.personal_id,
-        email: booking.email,
-        faculty: booking.faculty,
-        university: booking.university,
-        gender: booking.gender,
-        phone: booking.phone,
-        degree_level: booking.degree_level,
-        program: booking.program,
-        class: booking.class,
-        nationality: booking.nationality,
-        role: 'attendee' // Default role
-      },
-      session: {
-        id: booking.session_id,
-        title: booking.session_title,
-        description: booking.session_description,
-        speaker: booking.session_speaker,
-        start_time: booking.session_start_time,
-        end_time: booking.session_end_time,
-        location: booking.session_location,
-        capacity: booking.session_capacity,
-        current_bookings: booking.session_current_bookings,
-        session_type: booking.session_type
-      }
-    }));
-
-    return transformedBookings;
+    console.log(`Direct query returned ${bookings?.length || 0} bookings for Day ${day}`);
+    return bookings || [];
   } catch (error) {
-    console.error(`Unexpected error fetching Day ${day} bookings:`, error);
-    return await fetchOpenRecruitmentBookingsDirect(day);
+    console.error(`Error fetching Day ${day} bookings:`, error);
+    return [];
   }
 };
-
 // Fixed direct query with explicit relationship specification
 const fetchOpenRecruitmentBookingsDirect = async (day: number): Promise<AttendanceItem[]> => {
   try {
@@ -613,6 +640,91 @@ const fetchOpenRecruitmentBookingsDirect = async (day: number): Promise<Attendan
     return [];
   }
 };
+
+  // Add these helper functions near your other checkbox handlers
+
+const handleDayChange = (day: number) => {
+
+  setSelectedDays(prev => {
+
+    if (prev.includes(day)) {
+
+      // Remove day
+
+      return prev.filter(d => d !== day);
+
+    } else {
+
+      // Add day and sort
+
+      return [...prev, day].sort((a, b) => a - b);
+
+    }
+
+  });
+
+};
+
+const handleEditDayChange = (day: number) => {
+
+  setEditSelectedDays(prev => {
+
+    if (prev.includes(day)) {
+
+      // Remove day
+
+      return prev.filter(d => d !== day);
+
+    } else {
+
+      // Add day and sort
+
+      return [...prev, day].sort((a, b) => a - b);
+
+    }
+
+  });
+
+};
+
+// HR Emails handlers
+
+const handleAddHrEmail = () => {
+
+  if (newHrEmail && newHrEmail.includes('@')) {
+
+    setHrEmails(prev => [...prev, newHrEmail.trim()]);
+
+    setNewHrEmail("");
+
+  }
+
+};
+
+const handleAddEditHrEmail = () => {
+
+  if (editNewHrEmail && editNewHrEmail.includes('@')) {
+
+    setEditHrEmails(prev => [...prev, editNewHrEmail.trim()]);
+
+    setEditNewHrEmail("");
+
+  }
+
+};
+
+const handleRemoveHrEmail = (index: number) => {
+
+  setHrEmails(prev => prev.filter((_, i) => i !== index));
+
+};
+
+const handleRemoveEditHrEmail = (index: number) => {
+
+  setEditHrEmails(prev => prev.filter((_, i) => i !== index));
+
+};
+ 
   // Load bookings when Open Recruitment tab is active
   useEffect(() => {
     if (activeTab === "open-recruitment") {
@@ -932,25 +1044,29 @@ const handleEditEvent = (event: EventItem) => {
   }
 };
 
-  const handleEditCompany = (company: CompanyItem) => {
-    setSelectedCompanyEdit(company);
-    setEditCompany({
-      id: company.id,
-      name: company.name || "",
-      logo: null,
-      logoUrl: company.logo_url || "",
-      logoType: "link",
-      description: company.description || "",
-      website: company.website || "",
-      boothNumber: company.booth_number || "",
-      partnerType: company.partner_type || "",
-      academicFaculties: company.academic_faculties_seeking_for || [],
-      vacanciesType: company.vacancies_type || [],
-    });
-    setEditSelectedAcademicFaculties(company.academic_faculties_seeking_for || []);
-    setEditSelectedVacanciesTypes(company.vacancies_type || []);
-    setEditCompanyModal(true);
-  };
+const handleEditCompany = (company: CompanyItem) => {
+  setSelectedCompanyEdit(company);
+  setEditCompany({
+    id: company.id,
+    name: company.name || "",
+    logo: null,
+    logoUrl: company.logo_url || "",
+    logoType: "link",
+    description: company.description || "",
+    website: company.website || "",
+    boothNumber: company.booth_number || "",
+    partnerType: company.partner_type || "",
+    academicFaculties: company.academic_faculties_seeking_for || [],
+    vacanciesType: company.vacancies_type || [],
+    days: company.days || [], // Add this
+    hrMails: company.hr_mails || [], // Add this
+  });
+  setEditSelectedAcademicFaculties(company.academic_faculties_seeking_for || []);
+  setEditSelectedVacanciesTypes(company.vacancies_type || []);
+  setEditSelectedDays(company.days || []); // Add this
+  setEditHrEmails(company.hr_mails || []); // Add this
+  setEditCompanyModal(true);
+};
 
   // Enhanced Stat Card Component with animations
   const StatCard: React.FC<{ title: string; value: number | string | JSX.Element; icon: JSX.Element; color: 'blue' | 'green' | 'purple' | 'orange' | 'red'; }> = ({ title, value, icon, color }) => {
@@ -1170,22 +1286,24 @@ const handleEditEvent = (event: EventItem) => {
       }
 
       const updateData = {
-        name: editCompany.name,
-        logo_url: logoUrl,
-        description: editCompany.description,
-        website: editCompany.website,
-        booth_number: editCompany.boothNumber,
-        partner_type: editCompany.partnerType,
-        academic_faculties_seeking_for: editSelectedAcademicFaculties.length > 0 ? editSelectedAcademicFaculties : null,
-        vacancies_type: editSelectedVacanciesTypes.length > 0 ? editSelectedVacanciesTypes : null,
-      };
+      name: editCompany.name,
+      logo_url: logoUrl,
+      description: editCompany.description,
+      website: editCompany.website,
+      booth_number: editCompany.boothNumber,
+      partner_type: editCompany.partnerType,
+      academic_faculties_seeking_for: editSelectedAcademicFaculties.length > 0 ? editSelectedAcademicFaculties : null,
+      vacancies_type: editSelectedVacanciesTypes.length > 0 ? editSelectedVacanciesTypes : null,
+      days: editSelectedDays.length > 0 ? editSelectedDays : null, // Add this
+      hr_mails: editHrEmails.length > 0 ? editHrEmails : null, // Add this
+    };
 
-      const { error } = await supabase.from("companies").update(updateData).eq('id', editCompany.id);
+    const { error } = await supabase.from("companies").update(updateData).eq('id', editCompany.id);
 
-       if (error) {
+    if (error) {
       showFeedback("Failed to update company", "error");
     } else {
-      setEditCompanyModal(false); // Close edit modal
+      setEditCompanyModal(false);
       setEditCompany({
         id: "",
         name: "",
@@ -1198,9 +1316,13 @@ const handleEditEvent = (event: EventItem) => {
         partnerType: "",
         academicFaculties: [],
         vacanciesType: [],
+        days: [], // Reset
+        hrMails: [], // Reset
       });
       setEditSelectedAcademicFaculties([]);
       setEditSelectedVacanciesTypes([]);
+      setEditSelectedDays([]); // Reset
+      setEditHrEmails([]); // Reset
       showFeedback("Company updated successfully!", "success");
       await fetchCompanies();
     }
@@ -2039,6 +2161,8 @@ const handleEditEvent = (event: EventItem) => {
       fetchDailyActivity(selectedDay);
     }, [selectedDay]);
 
+
+    
     const fetchDailyActivity = async (day: number) => {
       try {
         // Calculate the date for the selected day (Day 1 = Oct 19, 2025)
@@ -2349,44 +2473,50 @@ const handleEditEvent = (event: EventItem) => {
       }
 
       const insertData = {
-        name: newCompany.name,
-        logo_url: logoUrl,
-        description: newCompany.description,
-        website: newCompany.website,
-        booth_number: newCompany.boothNumber,
-        partner_type: newCompany.partnerType,
-        academic_faculties_seeking_for: selectedAcademicFaculties.length > 0 ? selectedAcademicFaculties : null,
-        vacancies_type: selectedVacanciesTypes.length > 0 ? selectedVacanciesTypes : null,
-      };
+      name: newCompany.name,
+      logo_url: logoUrl,
+      description: newCompany.description,
+      website: newCompany.website,
+      booth_number: newCompany.boothNumber,
+      partner_type: newCompany.partnerType,
+      academic_faculties_seeking_for: selectedAcademicFaculties.length > 0 ? selectedAcademicFaculties : null,
+      vacancies_type: selectedVacanciesTypes.length > 0 ? selectedVacanciesTypes : null,
+      days: selectedDays.length > 0 ? selectedDays : null, // Add this
+      hr_mails: hrEmails.length > 0 ? hrEmails : null, // Add this
+    };
 
-      const { error } = await supabase.from("companies").insert(insertData);
+    const { error } = await supabase.from("companies").insert(insertData);
 
-      if (error) {
-        showFeedback("Failed to add company", "error");
-      } else {
-        setCompanyModal(false);
-        setNewCompany({
-          name: "",
-          logo: null,
-          logoUrl: "",
-          logoType: "link",
-          description: "",
-          website: "",
-          boothNumber: "",
-          partnerType: "",
-          academicFaculties: [],
-          vacanciesType: [],
-        });
-        setSelectedAcademicFaculties([]);
-        setSelectedVacanciesTypes([]);
-        showFeedback("Company added successfully!", "success");
-        await fetchCompanies();
-      }
-    } catch (err) {
+    if (error) {
       showFeedback("Failed to add company", "error");
-    } finally {
-      setLoading(false);
+    } else {
+      setCompanyModal(false);
+      setNewCompany({
+        name: "",
+        logo: null,
+        logoUrl: "",
+        logoType: "link",
+        description: "",
+        website: "",
+        boothNumber: "",
+        partnerType: "",
+        academicFaculties: [],
+        vacanciesType: [],
+        days: [], // Reset
+        hrMails: [], // Reset
+      });
+      setSelectedAcademicFaculties([]);
+      setSelectedVacanciesTypes([]);
+      setSelectedDays([]); // Reset
+      setHrEmails([]); // Reset
+      showFeedback("Company added successfully!", "success");
+      await fetchCompanies();
     }
+  } catch (err) {
+    showFeedback("Failed to add company", "error");
+  } finally {
+    setLoading(false);
+  }
   };
 
   // Handle Session Submit
@@ -3219,86 +3349,95 @@ const handleEditEvent = (event: EventItem) => {
             </div>
           )}
 
-          {/* Companies Tab - Responsive */}
-          {activeTab === "companies" && (
-            <div className="fade-in-blur">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6">
-                <h2 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center mb-4 sm:mb-0 fade-in-blur">
-                  <Building className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-orange-600" /> Companies Management
-                </h2>
-                <button
-                  onClick={() => setCompanyModal(true)}
-                  className="flex items-center px-3 sm:px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all duration-300 smooth-hover fade-in-blur"
+ {/* Companies Tab - Responsive */}
+{activeTab === "companies" && (
+  <div className="fade-in-blur">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6">
+      <h2 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center mb-4 sm:mb-0 fade-in-blur">
+        <Building className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-orange-600" /> Companies Management
+      </h2>
+      <button
+        onClick={() => setCompanyModal(true)}
+        className="flex items-center px-3 sm:px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all duration-300 smooth-hover fade-in-blur"
+      >
+        <Plus className="h-4 w-4 mr-2" />
+        <span className="text-sm sm:text-base">Add Company</span>
+      </button>
+    </div>
+
+    <div className="space-y-6 sm:space-y-8">
+      {PARTNER_TYPES.map((partnerType) => {
+        const partnerCompanies = companies.filter(company => 
+          company.partner_type === partnerType
+        );
+        
+        if (partnerCompanies.length === 0) return null;
+        
+        return (
+          <div key={partnerType} className="fade-in-blur">
+            <h3 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+              {partnerType}
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 stagger-children">
+              {partnerCompanies.map((company) => (
+                <div 
+                  key={company.id} 
+                  className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 hover:shadow-md transition-all duration-300 smooth-hover card-hover fade-in-blur"
                 >
-                  <Plus className="h-4 w-4 mr-2" />
-                  <span className="text-sm sm:text-base">Add Company</span>
-                </button>
-              </div>
+                  <div className="text-center">
+                    <img 
+                      src={company.logo_url} 
+                      alt={`${company.name} logo`} 
+                      className="h-12 sm:h-16 w-auto mx-auto mb-3 sm:mb-4 object-contain"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/64x64/orange/white?text=Logo";
+                      }}
+                    />
+                    <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-2">{company.name}</h3>
+                    
+                    {/* Partner Type Badge */}
+                    {company.partner_type && (
+                      <div className="inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 mb-2">
+                        {company.partner_type}
+                      </div>
+                    )}
+                    
+                    {/* ADD THE DAYS BADGE RIGHT HERE - after partner type badge */}
+                    {/* Days Badge */}
+                    {company.days && company.days.length > 0 && (
+                      <div className="inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mb-2 ml-1 sm:ml-2">
+                        <Calendar className="h-3 w-3 mr-1" />
+                        Days: {company.days.sort().join(',')}
+                      </div>
+                    )}
+                    
+                    {company.booth_number && (
+                      <div className="inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 mb-3 sm:mb-4 ml-1 sm:ml-2">
+                          Booth {company.booth_number}
+                      </div>
+                    )}
 
-              <div className="space-y-6 sm:space-y-8">
-                {PARTNER_TYPES.map((partnerType) => {
-                  const partnerCompanies = companies.filter(company => 
-                    company.partner_type === partnerType
-                  );
-                  
-                  if (partnerCompanies.length === 0) return null;
-                  
-                  return (
-                    <div key={partnerType} className="fade-in-blur">
-                      <h3 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b border-gray-200">
-                        {partnerType}
-                      </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 stagger-children">
-                        {partnerCompanies.map((company) => (
-                          <div 
-                            key={company.id} 
-                            className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 hover:shadow-md transition-all duration-300 smooth-hover card-hover fade-in-blur"
-                          >
-                            <div className="text-center">
-                              <img 
-                                src={company.logo_url} 
-                                alt={`${company.name} logo`} 
-                                className="h-12 sm:h-16 w-auto mx-auto mb-3 sm:mb-4 object-contain"
-                                onError={(e) => {
-                                  (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/64x64/orange/white?text=Logo";
-                                }}
-                              />
-                              <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-2">{company.name}</h3>
-                              
-                              {/* Partner Type Badge */}
-                              {company.partner_type && (
-                                <div className="inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 mb-2">
-                                  {company.partner_type}
-                                </div>
-                              )}
-                              
-                              {company.booth_number && (
-                                <div className="inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 mb-3 sm:mb-4 ml-1 sm:ml-2">
-                                  Booth {company.booth_number}
-                                </div>
-                              )}
-
-                              {/* Academic Faculties */}
-                              {company.academic_faculties_seeking_for && company.academic_faculties_seeking_for.length > 0 && (
-                                <div className="mb-2">
-                                  <div className="flex items-center text-xs text-gray-600 mb-1">
-                                    <BookOpen className="h-3 w-3 mr-1" />
-                                    <span className="font-medium">Faculties:</span>
-                                  </div>
-                                  <div className="flex flex-wrap gap-1">
-                                    {company.academic_faculties_seeking_for.slice(0, 2).map((faculty, index) => (
-                                      <span key={index} className="text-xs bg-blue-100 text-blue-800 px-1 py-0.5 rounded">
-                                        {faculty.split(' ').pop()}
-                                      </span>
-                                    ))}
-                                    {company.academic_faculties_seeking_for.length > 2 && (
-                                      <span className="text-xs bg-blue-100 text-blue-800 px-1 py-0.5 rounded">
-                                        +{company.academic_faculties_seeking_for.length - 2}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
+                    {/* Academic Faculties */}
+                    {company.academic_faculties_seeking_for && company.academic_faculties_seeking_for.length > 0 && (
+                      <div className="mb-2">
+                        <div className="flex items-center text-xs text-gray-600 mb-1">
+                          <BookOpen className="h-3 w-3 mr-1" />
+                          <span className="font-medium">Faculties:</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {company.academic_faculties_seeking_for.slice(0, 2).map((faculty, index) => (
+                            <span key={index} className="text-xs bg-blue-100 text-blue-800 px-1 py-0.5 rounded">
+                              {faculty.split(' ').pop()}
+                            </span>
+                          ))}
+                          {company.academic_faculties_seeking_for.length > 2 && (
+                            <span className="text-xs bg-blue-100 text-blue-800 px-1 py-0.5 rounded">
+                              +{company.academic_faculties_seeking_for.length - 2}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                               {/* Vacancies Type */}
                               {company.vacancies_type && company.vacancies_type.length > 0 && (
@@ -3397,81 +3536,87 @@ const handleEditEvent = (event: EventItem) => {
               </div>
 
               {loading ? (
-                <div className="flex items-center justify-center h-32 fade-in-blur">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+      <div className="flex items-center justify-center h-32 fade-in-blur">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+      </div>
+    ) : (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 stagger-children">
+        {(openRecruitmentDay === 4 ? day4Bookings : day5Bookings).map((booking) => (
+          <div 
+            key={booking.id} 
+            onClick={() => handleBookingClick(booking)}
+            className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 hover:shadow-md transition-all duration-300 smooth-hover card-hover fade-in-blur cursor-pointer"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                  <User className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600" />
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 stagger-children">
-                {(openRecruitmentDay === 4 ? day4Bookings : day5Bookings).map((booking) => (
-  <div 
-    key={booking.id} 
-    onClick={() => handleBookingClick(booking)}
-    className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 hover:shadow-md transition-all duration-300 smooth-hover card-hover fade-in-blur cursor-pointer"
-  >
-    <div className="flex items-center justify-between mb-4">
-      <div className="flex items-center space-x-3">
-        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-100 rounded-full flex items-center justify-center">
-          <User className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600" />
-        </div>
-        <div>
-          <h3 className="font-semibold text-gray-900 text-sm sm:text-base">
-            {booking.user?.first_name} {booking.user?.last_name}
-          </h3>
-          <p className="text-xs sm:text-sm text-gray-500">
-            {booking.user?.personal_id} • {booking.user?.faculty}
-          </p>
-        </div>
-      </div>
-    </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-sm sm:text-base">
+                    {booking.user?.first_name} {booking.user?.last_name}
+                  </h3>
+                  <p className="text-xs sm:text-sm text-gray-500">
+                    {booking.user?.personal_id} • {booking.user?.faculty}
+                  </p>
+                  {/* ADD PHONE NUMBER HERE */}
+                  {booking.user?.phone && (
+                    <p className="text-xs text-blue-600 mt-1">
+                      📞 {booking.user.phone}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
 
-    <div className="space-y-2 text-xs sm:text-sm text-gray-600">
-      <div className="flex items-center">
-        <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
-        <span>
-          Session: {booking.session?.title}
-        </span>
-      </div>
-      <div className="flex items-center">
-        <Clock className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
-        <span>
-          {new Date(booking.session?.start_time || booking.scanned_at).toLocaleDateString()} at {' '}
-          {new Date(booking.session?.start_time || booking.scanned_at).toLocaleTimeString()}
-        </span>
-      </div>
-      {booking.session?.speaker && (
-        <div className="flex items-center">
-          <User className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
-          <span>Speaker: {booking.session.speaker}</span>
-        </div>
-      )}
-    </div>
-
-    <div className="flex gap-2 mt-4">
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          handleBookingClick(booking);
-        }}
-        className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
-      >
-        <Eye className="h-3 w-3 mr-1 inline" />
-        View
-      </button>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          openDeleteBookingModal(booking);
-        }}
-        className="flex-1 bg-red-500 text-white py-2 px-3 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
-      >
-        <Trash2 className="h-3 w-3 mr-1 inline" />
-        Delete
-      </button>
-    </div>
-  </div>
-))}
+            <div className="space-y-2 text-xs sm:text-sm text-gray-600">
+              <div className="flex items-center">
+                <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+                <span>
+                  Session: {booking.session?.title}
+                </span>
+              </div>
+              <div className="flex items-center">
+                <Clock className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+                <span>
+                  {new Date(booking.session?.start_time || booking.scanned_at).toLocaleDateString()} at {' '}
+                  {new Date(booking.session?.start_time || booking.scanned_at).toLocaleTimeString()}
+                </span>
+              </div>
+              {booking.session?.speaker && (
+                <div className="flex items-center">
+                  <User className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+                  <span>Speaker: {booking.session.speaker}</span>
                 </div>
               )}
+            </div>
+
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleBookingClick(booking);
+                }}
+                className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+              >
+                <Eye className="h-3 w-3 mr-1 inline" />
+                View
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openDeleteBookingModal(booking);
+                }}
+                className="flex-1 bg-red-500 text-white py-2 px-3 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+              >
+                <Trash2 className="h-3 w-3 mr-1 inline" />
+                Delete
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
 
               {(openRecruitmentDay === 4 ? day4Bookings : day5Bookings).length === 0 && !loading && (
                 <div className="text-center py-8 sm:py-12 bg-white rounded-xl border border-gray-200 fade-in-blur">
@@ -3591,7 +3736,47 @@ const handleEditEvent = (event: EventItem) => {
               <p className="text-gray-500 text-sm sm:text-base">No website provided</p>
             )}
           </div>
+{/* Days */}
+{selectedCompanyDetail.days && selectedCompanyDetail.days.length > 0 && (
+  <div className="fade-in-blur">
+    <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+      <Calendar className="h-4 w-4 mr-2" />
+      Days
+    </label>
+    <div className="flex flex-wrap gap-2">
+      {selectedCompanyDetail.days.map((day, index) => {
+        const dayLabel = OPEN_RECRUITMENT_DAYS.find(d => d.value === day);
+        return (
+          <span key={index} className="inline-flex items-center px-2 sm:px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-xs sm:text-sm">
+            {dayLabel?.label || `Day ${day}`}
+          </span>
+        );
+      })}
+    </div>
+  </div>
+)}
 
+{/* HR Emails */}
+{selectedCompanyDetail.hr_mails && selectedCompanyDetail.hr_mails.length > 0 && (
+  <div className="fade-in-blur">
+    <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+      <User className="h-4 w-4 mr-2" />
+      HR Contact Emails
+    </label>
+    <div className="space-y-2">
+      {selectedCompanyDetail.hr_mails.map((email, index) => (
+        <div key={index} className="bg-gray-50 p-2 rounded">
+          <a 
+            href={`mailto:${email}`}
+            className="text-orange-600 hover:text-orange-700 text-sm sm:text-base break-all"
+          >
+            {email}
+          </a>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
           {/* Additional Information */}
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
             {/* Created Date */}
@@ -3999,6 +4184,11 @@ const handleEditEvent = (event: EventItem) => {
                 <label className="font-medium text-gray-700">Email:</label>
                 <p className="text-gray-900">{selectedBooking.user?.email}</p>
               </div>
+              {/* ADD PHONE NUMBER HERE */}
+              <div>
+                <label className="font-medium text-gray-700">Phone:</label>
+                <p className="text-gray-900">{selectedBooking.user?.phone || 'Not provided'}</p>
+              </div>
               <div>
                 <label className="font-medium text-gray-700">Gender:</label>
                 <p className="text-gray-900 capitalize">{selectedBooking.user?.gender || 'Not specified'}</p>
@@ -4341,7 +4531,84 @@ const handleEditEvent = (event: EventItem) => {
             placeholder="https://company-website.com"
           />
         </div>
+{/* Days Selection */}
+<div className="fade-in-blur">
+  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+    <Calendar className="h-4 w-4 mr-2" />
+    Days
+  </label>
+  <div className="grid grid-cols-2 gap-2 sm:gap-3">
+    {OPEN_RECRUITMENT_DAYS.map((dayOption) => (
+      <label 
+        key={dayOption.value} 
+        className="flex items-center space-x-2 cursor-pointer p-2 hover:bg-gray-50 rounded transition-colors"
+      >
+        <input
+          type="checkbox"
+          checked={selectedDays.includes(dayOption.value)}
+          onChange={() => handleDayChange(dayOption.value)}
+          className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 w-4 h-4"
+        />
+        <span className="text-sm text-gray-700">{dayOption.label}</span>
+      </label>
+    ))}
+  </div>
+  <p className="text-xs text-gray-500 mt-2">
+    Selected: {selectedDays.length > 0 ? selectedDays.join(', ') : 'None'}
+  </p>
+</div>
 
+{/* HR Emails */}
+<div className="fade-in-blur">
+  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+    <User className="h-4 w-4 mr-2" />
+    HR Contact Emails
+  </label>
+  <div className="space-y-2">
+    <div className="flex gap-2">
+      <input
+        type="email"
+        value={newHrEmail}
+        onChange={(e) => setNewHrEmail(e.target.value)}
+        className="flex-1 border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+        placeholder="Enter HR email address"
+        onKeyPress={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            handleAddHrEmail();
+          }
+        }}
+      />
+      <button
+        type="button"
+        onClick={handleAddHrEmail}
+        className="px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm"
+      >
+        Add
+      </button>
+    </div>
+    
+    {hrEmails.length > 0 && (
+      <div className="space-y-1">
+        {hrEmails.map((email, index) => (
+          <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded">
+            <span className="text-sm text-gray-700">{email}</span>
+            <button
+              type="button"
+              onClick={() => handleRemoveHrEmail(index)}
+              className="text-red-500 hover:text-red-700"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+  <p className="text-xs text-gray-500 mt-1">
+    Add HR email addresses for recruitment contact
+  </p>
+</div>
         {/* Booth Number */}
         <div className="fade-in-blur">
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -4576,7 +4843,84 @@ const handleEditEvent = (event: EventItem) => {
             placeholder="https://company-website.com"
           />
         </div>
+{/* Days Selection for Edit */}
+<div className="fade-in-blur">
+  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+    <Calendar className="h-4 w-4 mr-2" />
+    Days
+  </label>
+  <div className="grid grid-cols-2 gap-2 sm:gap-3">
+    {OPEN_RECRUITMENT_DAYS.map((dayOption) => (
+      <label 
+        key={dayOption.value} 
+        className="flex items-center space-x-2 cursor-pointer p-2 hover:bg-gray-50 rounded transition-colors"
+      >
+        <input
+          type="checkbox"
+          checked={editSelectedDays.includes(dayOption.value)}
+          onChange={() => handleEditDayChange(dayOption.value)}
+          className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 w-4 h-4"
+        />
+        <span className="text-sm text-gray-700">{dayOption.label}</span>
+      </label>
+    ))}
+  </div>
+  <p className="text-xs text-gray-500 mt-2">
+    Selected: {editSelectedDays.length > 0 ? editSelectedDays.join(', ') : 'None'}
+  </p>
+</div>
 
+{/* HR Emails for Edit */}
+<div className="fade-in-blur">
+  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+    <User className="h-4 w-4 mr-2" />
+    HR Contact Emails
+  </label>
+  <div className="space-y-2">
+    <div className="flex gap-2">
+      <input
+        type="email"
+        value={editNewHrEmail}
+        onChange={(e) => setEditNewHrEmail(e.target.value)}
+        className="flex-1 border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+        placeholder="Enter HR email address"
+        onKeyPress={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            handleAddEditHrEmail();
+          }
+        }}
+      />
+      <button
+        type="button"
+        onClick={handleAddEditHrEmail}
+        className="px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm"
+      >
+        Add
+      </button>
+    </div>
+    
+    {editHrEmails.length > 0 && (
+      <div className="space-y-1">
+        {editHrEmails.map((email, index) => (
+          <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded">
+            <span className="text-sm text-gray-700">{email}</span>
+            <button
+              type="button"
+              onClick={() => handleRemoveEditHrEmail(index)}
+              className="text-red-500 hover:text-red-700"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+  <p className="text-xs text-gray-500 mt-1">
+    Add HR email addresses for recruitment contact
+  </p>
+</div>
         {/* Booth Number */}
         <div className="fade-in-blur">
           <label className="block text-sm font-medium text-gray-700 mb-2">
