@@ -116,6 +116,8 @@ interface SessionItem {
   current_bookings?: number;
   session_type?: string;
   max_attendees?: number;
+  speaker_photo_url?: string; // Add this
+  speaker_linkedin_url?: string; // Add this
 }
 
 interface EventItem {
@@ -308,17 +310,35 @@ const [editCompany, setEditCompany] = useState<{
   hrMails: [], // Add this
 });
 
-  const [editSession, setEditSession] = useState<{ id: string; title: string; date: string; speaker: string; capacity: string | number; type: 'session' | string; hour: string; location: string; description: string;}>({
-    id: "",
-    title: "",
-    date: "",
-    speaker: "",
-    capacity: "",
-    type: "session",
-    hour: "",
-    location: "",
-    description: "",
-  });
+  const [editSession, setEditSession] = useState<{ 
+  id: string; 
+  title: string; 
+  date: string; 
+  speaker: string; 
+  capacity: string | number; 
+  type: 'session' | string; 
+  hour: string; 
+  location: string; 
+  description: string;
+  speakerPhoto: File | null; // Add this
+  speakerPhotoUrl: string; // Add this
+  speakerPhotoType: 'link' | 'upload'; // Add this
+  speakerLinkedIn: string; // Add this
+}>({
+  id: "",
+  title: "",
+  date: "",
+  speaker: "",
+  capacity: "",
+  type: "session",
+  hour: "",
+  location: "",
+  description: "",
+  speakerPhoto: null, // Add this
+  speakerPhotoUrl: "", // Add this
+  speakerPhotoType: "link", // Add this
+  speakerLinkedIn: "" // Add this
+});
 
   const [editEvent, setEditEvent] = useState<{ id: string; title: string; description: string; startDate: string; endDate: string; startTime: string; endTime: string; location: string; type: 'general' | string;}>({
     id: "",
@@ -360,17 +380,33 @@ const [newCompany, setNewCompany] = useState<{
   days: [], // Add this
   hrMails: [], // Add this
 });
-
-  const [newSession, setNewSession] = useState<{ title: string; date: string; speaker: string; capacity: string | number; type: 'session' | string; hour: string; location: string; description: string;}>({
-    title: "",
-    date: "",
-    speaker: "",
-    capacity: "",
-    type: "session",
-    hour: "",
-    location: "",
-    description: "",
-  });
+const [newSession, setNewSession] = useState<{ 
+  title: string; 
+  date: string; 
+  speaker: string; 
+  capacity: string | number; 
+  type: 'session' | string; 
+  hour: string; 
+  location: string; 
+  description: string;
+  speakerPhoto: File | null; // Add this
+  speakerPhotoUrl: string; // Add this
+  speakerPhotoType: 'link' | 'upload'; // Add this
+  speakerLinkedIn: string; // Add this
+}>({
+  title: "",
+  date: "",
+  speaker: "",
+  capacity: "",
+  type: "session",
+  hour: "",
+  location: "",
+  description: "",
+  speakerPhoto: null, // Add this
+  speakerPhotoUrl: "", // Add this
+  speakerPhotoType: "link", // Add this
+  speakerLinkedIn: "" // Add this
+});
 
   const [newEvent, setNewEvent] = useState<{ title: string; description: string; startDate: string; endDate: string; startTime: string; endTime: string; location: string; type: 'general' | string;}>({
     title: "",
@@ -914,9 +950,13 @@ const handleEditSession = (session: SessionItem) => {
     date: startTime.toISOString().split('T')[0],
     hour: startTime.toTimeString().slice(0, 5),
     location: session.location || "",
+    speakerPhoto: null, // Add this
+    speakerPhotoUrl: session.speaker_photo_url || "", // Add this
+    speakerPhotoType: "link", // Add this
+    speakerLinkedIn: session.speaker_linkedin_url || "" // Add this
   });
   setEditSessionModal(true);
-  setSessionDetailModal(false); // Close detail modal when editing
+  setSessionDetailModal(false);
 };
 
 const handleEditEvent = (event: EventItem) => {
@@ -943,40 +983,68 @@ const handleEditEvent = (event: EventItem) => {
     setEventDetailModal(true);
   };
 
-  const handleSessionUpdate = async () => {
-    if (!editSession.title || !editSession.date || !editSession.speaker) {
-      showFeedback("Please fill all required fields!", "error");
-      return;
+const handleSessionUpdate = async () => {
+  if (!editSession.title || !editSession.date || !editSession.speaker) {
+    showFeedback("Please fill all required fields!", "error");
+    return;
+  }
+
+  setLoading(true);
+  try {
+    const startDateTime = new Date(`${editSession.date}T${editSession.hour}`);
+    const endDateTime = new Date(startDateTime.getTime() + 2 * 60 * 60 * 1000);
+    let capacityValue: number | null = null;
+    if (typeof editSession.capacity === 'number') {
+      capacityValue = editSession.capacity;
+    } else if (typeof editSession.capacity === 'string') {
+      const parsed = parseInt(editSession.capacity, 10);
+      capacityValue = isNaN(parsed) ? null : parsed;
     }
 
-    setLoading(true);
-    try {
-      const startDateTime = new Date(`${editSession.date}T${editSession.hour}`);
-      const endDateTime = new Date(startDateTime.getTime() + 2 * 60 * 60 * 1000);
-      let capacityValue: number | null = null;
-      if (typeof editSession.capacity === 'number') {
-        capacityValue = editSession.capacity;
-      } else if (typeof editSession.capacity === 'string') {
-        const parsed = parseInt(editSession.capacity, 10);
-        capacityValue = isNaN(parsed) ? null : parsed;
+    // Handle speaker photo upload
+    let speakerPhotoUrl = editSession.speakerPhotoUrl;
+
+    if (editSession.speakerPhotoType === "upload" && editSession.speakerPhoto) {
+      const fileExt = editSession.speakerPhoto.name.split('.').pop();
+      const fileName = `${Date.now()}-${editSession.speaker.replace(/[^a-zA-Z0-9]/g, '_')}.${fileExt}`;
+      const filePath = `speakers/${fileName}`;
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("Assets")
+        .upload(filePath, editSession.speakerPhoto);
+
+      if (uploadError) {
+        console.error("Speaker photo upload error:", uploadError);
+        showFeedback("Failed to upload speaker photo", "error");
+        setLoading(false);
+        return;
       }
 
-      const { error } = await supabase.from("sessions").update({
-        title: editSession.title,
-        description: editSession.description,
-        speaker: editSession.speaker,
-        start_time: startDateTime.toISOString(),
-        end_time: endDateTime.toISOString(),
-        location: editSession.location,
-        capacity: capacityValue,
-        max_attendees: capacityValue,
-        session_type: editSession.type,
-      }).eq('id', editSession.id);
+      const { data: urlData } = supabase.storage
+        .from("Assets")
+        .getPublicUrl(filePath);
 
-       if (error) {
+      speakerPhotoUrl = urlData.publicUrl;
+    }
+
+    const { error } = await supabase.from("sessions").update({
+      title: editSession.title,
+      description: editSession.description,
+      speaker: editSession.speaker,
+      start_time: startDateTime.toISOString(),
+      end_time: endDateTime.toISOString(),
+      location: editSession.location,
+      capacity: capacityValue,
+      max_attendees: capacityValue,
+      session_type: editSession.type,
+      speaker_photo_url: speakerPhotoUrl,
+      speaker_linkedin_url: editSession.speakerLinkedIn
+    }).eq('id', editSession.id);
+
+    if (error) {
       showFeedback("Failed to update session", "error");
     } else {
-      setEditSessionModal(false); // Close edit modal
+      setEditSessionModal(false);
       setEditSession({
         id: "",
         title: "",
@@ -987,6 +1055,10 @@ const handleEditEvent = (event: EventItem) => {
         hour: "",
         location: "",
         description: "",
+        speakerPhoto: null,
+        speakerPhotoUrl: "",
+        speakerPhotoType: "link",
+        speakerLinkedIn: ""
       });
       showFeedback("Session updated successfully!", "success");
       await fetchSessions();
@@ -2520,59 +2592,91 @@ const handleEditCompany = (company: CompanyItem) => {
   };
 
   // Handle Session Submit
-  const handleSessionSubmit = async () => {
-    if (!newSession.title || !newSession.date || !newSession.speaker) {
-      showFeedback("Please fill all required fields!", "error");
-      return;
+const handleSessionSubmit = async () => {
+  if (!newSession.title || !newSession.date || !newSession.speaker) {
+    showFeedback("Please fill all required fields!", "error");
+    return;
+  }
+
+  setLoading(true);
+  try {
+    const startDateTime = new Date(`${newSession.date}T${newSession.hour}`);
+    const endDateTime = new Date(startDateTime.getTime() + 2 * 60 * 60 * 1000);
+    let capacityValue: number | null = null;
+    if (typeof newSession.capacity === 'number') {
+      capacityValue = newSession.capacity;
+    } else if (typeof newSession.capacity === 'string') {
+      const parsed = parseInt(newSession.capacity, 10);
+      capacityValue = isNaN(parsed) ? null : parsed;
     }
 
-    setLoading(true);
-    try {
-      const startDateTime = new Date(`${newSession.date}T${newSession.hour}`);
-      const endDateTime = new Date(startDateTime.getTime() + 2 * 60 * 60 * 1000);
-      let capacityValue: number | null = null;
-      if (typeof newSession.capacity === 'number') {
-        capacityValue = newSession.capacity;
-      } else if (typeof newSession.capacity === 'string') {
-        const parsed = parseInt(newSession.capacity, 10);
-        capacityValue = isNaN(parsed) ? null : parsed;
+    // Handle speaker photo upload
+    let speakerPhotoUrl = newSession.speakerPhotoUrl;
+
+    if (newSession.speakerPhotoType === "upload" && newSession.speakerPhoto) {
+      const fileExt = newSession.speakerPhoto.name.split('.').pop();
+      const fileName = `${Date.now()}-${newSession.speaker.replace(/[^a-zA-Z0-9]/g, '_')}.${fileExt}`;
+      const filePath = `speakers/${fileName}`;
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("Assets")
+        .upload(filePath, newSession.speakerPhoto);
+
+      if (uploadError) {
+        console.error("Speaker photo upload error:", uploadError);
+        showFeedback("Failed to upload speaker photo", "error");
+        setLoading(false);
+        return;
       }
 
-      const { error } = await supabase.from("sessions").insert({
-        title: newSession.title,
-        description: newSession.description,
-        speaker: newSession.speaker,
-        start_time: startDateTime.toISOString(),
-        end_time: endDateTime.toISOString(),
-        location: newSession.location,
-        capacity: capacityValue,
-        max_attendees: capacityValue,
-        session_type: newSession.type,
-      });
+      const { data: urlData } = supabase.storage
+        .from("Assets")
+        .getPublicUrl(filePath);
 
-      if (error) {
-        showFeedback("Failed to add session", "error");
-      } else {
-        setSessionModal(false);
-        setNewSession({
-          title: "",
-          date: "",
-          speaker: "",
-          capacity: "",
-          type: "session",
-          hour: "",
-          location: "",
-          description: "",
-        });
-        showFeedback("Session added successfully!", "success");
-        await fetchSessions();
-      }
-    } catch (err) {
+      speakerPhotoUrl = urlData.publicUrl;
+    }
+
+    const { error } = await supabase.from("sessions").insert({
+      title: newSession.title,
+      description: newSession.description,
+      speaker: newSession.speaker,
+      start_time: startDateTime.toISOString(),
+      end_time: endDateTime.toISOString(),
+      location: newSession.location,
+      capacity: capacityValue,
+      max_attendees: capacityValue,
+      session_type: newSession.type,
+      speaker_photo_url: speakerPhotoUrl,
+      speaker_linkedin_url: newSession.speakerLinkedIn
+    });
+
+    if (error) {
       showFeedback("Failed to add session", "error");
-    } finally {
-      setLoading(false);
+    } else {
+      setSessionModal(false);
+      setNewSession({
+        title: "",
+        date: "",
+        speaker: "",
+        capacity: "",
+        type: "session",
+        hour: "",
+        location: "",
+        description: "",
+        speakerPhoto: null,
+        speakerPhotoUrl: "",
+        speakerPhotoType: "link",
+        speakerLinkedIn: ""
+      });
+      showFeedback("Session added successfully!", "success");
+      await fetchSessions();
     }
-  };
+  } catch (err) {
+    showFeedback("Failed to add session", "error");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const openDeleteCompanyModal = (company: CompanyItem) => {
     setSelectedCompanyDelete(company);
@@ -3135,87 +3239,99 @@ const handleEditCompany = (company: CompanyItem) => {
             <StatisticsTab />
           )}
 
-          {/* Sessions Tab - Responsive */}
-          {activeTab === "sessions" && (
-            <div className="fade-in-blur">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6">
-                <h2 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center mb-4 sm:mb-0 fade-in-blur">
-                  <Calendar className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-orange-600" /> Sessions Management
-                </h2>
-                <button
-                  onClick={() => setSessionModal(true)}
-                  className="flex items-center px-3 sm:px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-300 smooth-hover fade-in-blur"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  <span className="text-sm sm:text-base">Add Session</span>
-                </button>
-              </div>
+         {/* Sessions Tab - Responsive */}
+{activeTab === "sessions" && (
+  <div className="fade-in-blur">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6">
+      <h2 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center mb-4 sm:mb-0 fade-in-blur">
+        <Calendar className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-orange-600" /> Sessions Management
+      </h2>
+      <button
+        onClick={() => setSessionModal(true)}
+        className="flex items-center px-3 sm:px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-300 smooth-hover fade-in-blur"
+      >
+        <Plus className="h-4 w-4 mr-2" />
+        <span className="text-sm sm:text-base">Add Session</span>
+      </button>
+    </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 stagger-children">
-                {sessions.map((session) => (
-                  <div 
-                    key={session.id} 
-                    onClick={() => handleSessionClick(session)}
-                    className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 hover:shadow-md transition-all duration-300 smooth-hover card-hover fade-in-blur"
-                  >
-                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">{session.title}</h3>
-                    <p className="text-xs sm:text-sm text-gray-600 mb-3 line-clamp-2">{session.description}</p>
-                    {session.speaker && (
-                      <p className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Speaker: {session.speaker}</p>
-                    )}
-                    <div className="space-y-1 text-xs text-gray-500 mb-4">
-                      <div className="flex items-center">
-                        <Clock className="h-3 w-3 mr-1" />
-                        {new Date(session.start_time).toLocaleDateString()} {new Date(session.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </div>
-                      <div className="flex items-center">
-                        <MapPin className="h-3 w-3 mr-1" />
-                        {session.location}
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
-                        {session.session_type}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {session.current_bookings || 0}/{session.capacity || 'Unlimited'}
-                      </span>
-                    </div>
-                    
-                   <div className="flex gap-2 mt-4">
-  <button
-    onClick={() => handleSessionClick(session)}
-    className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
-  >
-    <Eye className="h-3 w-3 mr-1 inline" />
-    View
-  </button>
-  <button
-    onClick={(e) => {
-      e.stopPropagation(); // Add this line
-      handleEditSession(session);
-    }}
-    className="flex-1 bg-blue-500 text-white py-2 px-3 rounded-lg hover:bg-blue-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
-  >
-    Edit
-  </button>
-  <button
-    onClick={(e) => {
-      e.stopPropagation(); // Add this line
-      handleDeleteSession(session);
-    }}
-    className="flex-1 bg-red-500 text-white py-2 px-3 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
-  >
-    <Trash2 className="h-3 w-3 mr-1 inline" />
-    Delete
-  </button>
-</div>
-                  </div>
-                ))}
-              </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 stagger-children">
+      {sessions.map((session) => (
+        <div 
+          key={session.id} 
+          onClick={() => handleSessionClick(session)}
+          className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 hover:shadow-md transition-all duration-300 smooth-hover card-hover fade-in-blur"
+        >
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">{session.title}</h3>
+          <p className="text-xs sm:text-sm text-gray-600 mb-3 line-clamp-2">{session.description}</p>
+          {session.speaker && (
+            <p className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Speaker: {session.speaker}</p>
+          )}
+          {session.speaker_photo_url && (
+            <div className="mt-2">
+<img 
+  src={session.speaker_photo_url} 
+  alt={`${session.speaker} photo`}
+  className="h-12 w-12 rounded-full object-cover"
+  onError={(e) => {
+    (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/48x48/gray/white?text=Photo";
+  }}
+/>
             </div>
           )}
 
+          <div className="space-y-1 text-xs text-gray-500 mb-4">
+            <div className="flex items-center">
+              <Clock className="h-3 w-3 mr-1" />
+              {new Date(session.start_time).toLocaleDateString()} {new Date(session.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </div>
+            <div className="flex items-center">
+              <MapPin className="h-3 w-3 mr-1" />
+              {session.location}
+            </div>
+          </div>
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
+              {session.session_type}
+            </span>
+            <span className="text-xs text-gray-500">
+              {session.current_bookings || 0}/{session.capacity || 'Unlimited'}
+            </span>
+          </div>
+          
+          <div className="flex gap-2 mt-4">
+            <button
+              onClick={() => handleSessionClick(session)}
+              className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg hover:bg-gray-200 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+            >
+              <Eye className="h-3 w-3 mr-1 inline" />
+              View
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleEditSession(session);
+              }}
+              className="flex-1 bg-blue-500 text-white py-2 px-3 rounded-lg hover:bg-blue-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+            >
+              Edit
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteSession(session);
+              }}
+              className="flex-1 bg-red-500 text-white py-2 px-3 rounded-lg hover:bg-red-600 transition-all duration-300 smooth-hover text-xs sm:text-sm font-medium"
+            >
+              <Trash2 className="h-3 w-3 mr-1 inline" />
+              Delete
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
           {/* Events Tab - Responsive */}
           {activeTab === "events" && (
             <div className="fade-in-blur">
@@ -4102,7 +4218,88 @@ const handleEditCompany = (company: CompanyItem) => {
             placeholder="Enter capacity (leave empty for unlimited)"
           />
         </div>
+{/* Add this section to the Edit Session modal */}
+<div className="fade-in-blur">
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    Speaker LinkedIn Profile URL
+  </label>
+  <input
+    type="url"
+    value={editSession.speakerLinkedIn}
+    onChange={(e) => setEditSession({ ...editSession, speakerLinkedIn: e.target.value })}
+    className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+    placeholder="https://linkedin.com/in/speaker-profile"
+  />
+</div>
 
+<div className="fade-in-blur">
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    Speaker Photo
+  </label>
+  <div className="flex space-x-2 sm:space-x-4 mb-3">
+    <button
+      type="button"
+      onClick={() => setEditSession({ ...editSession, speakerPhotoType: "link" })}
+      className={`flex items-center px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
+        editSession.speakerPhotoType === "link" 
+          ? "bg-blue-500 text-white" 
+          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+      }`}
+    >
+      <Link className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+      URL
+    </button>
+    <button
+      type="button"
+      onClick={() => setEditSession({ ...editSession, speakerPhotoType: "upload" })}
+      className={`flex items-center px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
+        editSession.speakerPhotoType === "upload" 
+          ? "bg-blue-500 text-white" 
+          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+      }`}
+    >
+      <Upload className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+      Upload New
+    </button>
+  </div>
+  
+  {editSession.speakerPhotoType === "link" ? (
+    <input
+      type="url"
+      value={editSession.speakerPhotoUrl}
+      onChange={(e) => setEditSession({ ...editSession, speakerPhotoUrl: e.target.value })}
+      className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+      placeholder="https://example.com/speaker-photo.jpg"
+    />
+  ) : (
+    <div>
+      <input
+        type="file"
+        accept="image/*"
+        onChange={(e) => setEditSession({ ...editSession, speakerPhoto: e.target.files?.[0] || null })}
+        className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+      />
+      <p className="text-xs text-gray-500 mt-1">
+        Leave empty to keep current photo. Supported formats: PNG, JPG, SVG. Max size: 5MB
+      </p>
+    </div>
+  )}
+  
+  {/* Show current photo in edit modal */}
+  {editSession.speakerPhotoUrl && (
+    <div className="mt-3 p-3 bg-gray-50 rounded-lg fade-in-blur">
+      <p className="text-sm text-gray-600 mb-2">Current Speaker Photo:</p>
+      <img 
+        src={editSession.speakerPhotoUrl} 
+        alt="Current speaker" 
+        className="h-16 w-16 object-cover rounded-lg"
+        onError={(e) => {
+          (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/64x64/gray/white?text=Photo";
+        }}
+      />
+    </div>
+  )}
+</div>
         <div className="fade-in-blur">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Session Type *
@@ -5013,7 +5210,37 @@ const handleEditCompany = (company: CompanyItem) => {
               {selectedSessionDetail.current_bookings || 0} / {selectedSessionDetail.max_attendees || 'Unlimited'} booked
             </p>
           </div>
-
+{(selectedSessionDetail?.speaker_photo_url || selectedSessionDetail?.speaker_linkedin_url) && (
+  <div className="fade-in-blur">
+    <label className="block text-sm font-medium text-gray-700 mb-2">Speaker Details</label>
+    <div className="flex items-center space-x-4">
+      {selectedSessionDetail?.speaker_photo_url && (
+        <img 
+          src={selectedSessionDetail.speaker_photo_url} 
+          alt={`${selectedSessionDetail.speaker} photo`}
+          className="h-16 w-16 rounded-full object-cover"
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/64x64/gray/white?text=Photo";
+          }}
+        />
+      )}
+      <div>
+        <p className="text-gray-900 font-medium">{selectedSessionDetail?.speaker}</p>
+        {selectedSessionDetail?.speaker_linkedin_url && (
+          <a 
+            href={selectedSessionDetail.speaker_linkedin_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 text-sm flex items-center"
+          >
+            <Link className="h-3 w-3 mr-1" />
+            LinkedIn Profile
+          </a>
+        )}
+      </div>
+    </div>
+  </div>
+)}
           {/* Action Buttons */}
           <div className="pt-4 space-y-3 fade-in-blur">
             <div className="grid grid-cols-2 gap-3">
@@ -5054,6 +5281,7 @@ const handleEditCompany = (company: CompanyItem) => {
   </div>,
   document.body
 )}
+        
 
 {/* Event Detail Modal */}
 {eventDetailModal && selectedEventDetail && createPortal(
@@ -5407,6 +5635,73 @@ const handleEditCompany = (company: CompanyItem) => {
             placeholder="Enter capacity (leave empty for unlimited)"
           />
         </div>
+{/* Add this section to both Add Session and Edit Session modals */}
+<div className="fade-in-blur">
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    Speaker LinkedIn Profile URL
+  </label>
+  <input
+    type="url"
+    value={newSession.speakerLinkedIn}
+    onChange={(e) => setNewSession({ ...newSession, speakerLinkedIn: e.target.value })}
+    className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+    placeholder="https://linkedin.com/in/speaker-profile"
+  />
+</div>
+
+<div className="fade-in-blur">
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    Speaker Photo
+  </label>
+  <div className="flex space-x-2 sm:space-x-4 mb-3">
+    <button
+      type="button"
+      onClick={() => setNewSession({ ...newSession, speakerPhotoType: "link" })}
+      className={`flex items-center px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
+        newSession.speakerPhotoType === "link" 
+          ? "bg-blue-500 text-white" 
+          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+      }`}
+    >
+      <Link className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+      URL
+    </button>
+    <button
+      type="button"
+      onClick={() => setNewSession({ ...newSession, speakerPhotoType: "upload" })}
+      className={`flex items-center px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
+        newSession.speakerPhotoType === "upload" 
+          ? "bg-blue-500 text-white" 
+          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+      }`}
+    >
+      <Upload className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+      Upload
+    </button>
+  </div>
+  
+  {newSession.speakerPhotoType === "link" ? (
+    <input
+      type="url"
+      value={newSession.speakerPhotoUrl}
+      onChange={(e) => setNewSession({ ...newSession, speakerPhotoUrl: e.target.value })}
+      className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+      placeholder="https://example.com/speaker-photo.jpg"
+    />
+  ) : (
+    <div>
+      <input
+        type="file"
+        accept="image/*"
+        onChange={(e) => setNewSession({ ...newSession, speakerPhoto: e.target.files?.[0] || null })}
+        className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+      />
+      <p className="text-xs text-gray-500 mt-1">
+        Supported formats: PNG, JPG, SVG. Max size: 5MB. Will be stored in /Assets/speakers bucket
+      </p>
+    </div>
+  )}
+</div>
 
 <div className="fade-in-blur">
   <label className="block text-sm font-medium text-gray-700 mb-2">
