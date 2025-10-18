@@ -124,10 +124,13 @@ interface EventItem {
   id: string;
   title: string;
   description?: string;
+  speaker?: string; // Add this
   start_time: string;
   end_time?: string;
   location?: string;
   item_type?: string;
+  speaker_photo_url?: string; // Add this
+  speaker_linkedin_url?: string; // Add this
 }
 
 interface UserProfileItem {
@@ -340,17 +343,37 @@ const [editCompany, setEditCompany] = useState<{
   speakerLinkedIn: "" // Add this
 });
 
-  const [editEvent, setEditEvent] = useState<{ id: string; title: string; description: string; startDate: string; endDate: string; startTime: string; endTime: string; location: string; type: 'general' | string;}>({
-    id: "",
-    title: "",
-    description: "",
-    startDate: "",
-    endDate: "",
-    startTime: "",
-    endTime: "",
-    location: "",
-    type: "general",
-  });
+const [editEvent, setEditEvent] = useState<{ 
+  id: string; 
+  title: string; 
+  description: string; 
+  startDate: string; 
+  endDate: string; 
+  startTime: string; 
+  endTime: string; 
+  location: string; 
+  type: 'general' | string;
+  speaker: string; // Add this
+  speakerPhoto: File | null; // Add this
+  speakerPhotoUrl: string; // Add this
+  speakerPhotoType: 'link' | 'upload'; // Add this
+  speakerLinkedIn: string; // Add this
+}>({
+  id: "",
+  title: "",
+  description: "",
+  startDate: "",
+  endDate: "",
+  startTime: "",
+  endTime: "",
+  location: "",
+  type: "general",
+  speaker: "", // Add this
+  speakerPhoto: null, // Add this
+  speakerPhotoUrl: "", // Add this
+  speakerPhotoType: "link", // Add this
+  speakerLinkedIn: "" // Add this
+});
   
 // Update the newCompany state
 const [newCompany, setNewCompany] = useState<{ 
@@ -408,16 +431,35 @@ const [newSession, setNewSession] = useState<{
   speakerLinkedIn: "" // Add this
 });
 
-  const [newEvent, setNewEvent] = useState<{ title: string; description: string; startDate: string; endDate: string; startTime: string; endTime: string; location: string; type: 'general' | string;}>({
-    title: "",
-    description: "",
-    startDate: "",
-    endDate: "",
-    startTime: "",
-    endTime: "",
-    location: "",
-    type: "general",
-  });
+const [newEvent, setNewEvent] = useState<{ 
+  title: string; 
+  description: string; 
+  startDate: string; 
+  endDate: string; 
+  startTime: string; 
+  endTime: string; 
+  location: string; 
+  type: 'general' | string;
+  speaker: string; // Add this
+  speakerPhoto: File | null; // Add this
+  speakerPhotoUrl: string; // Add this
+  speakerPhotoType: 'link' | 'upload'; // Add this
+  speakerLinkedIn: string; // Add this
+}>({
+  title: "",
+  description: "",
+  startDate: "",
+  endDate: "",
+  startTime: "",
+  endTime: "",
+  location: "",
+  type: "general",
+  speaker: "", // Add this
+  speakerPhoto: null, // Add this
+  speakerPhotoUrl: "", // Add this
+  speakerPhotoType: "link", // Add this
+  speakerLinkedIn: "" // Add this
+});
 
   const [mapForm, setMapForm] = useState<{ day: number; image: File | null;}>({
     day: 1,
@@ -945,20 +987,19 @@ const handleEditSession = (session: SessionItem) => {
     title: session.title || "",
     description: session.description || "",
     speaker: session.speaker || "",
-    capacity: (session.current_bookings ?? "") as any,
+    capacity: session.max_attendees || session.capacity || "", // ✅ Use capacity fields, not current_bookings
     type: session.session_type || "session",
     date: startTime.toISOString().split('T')[0],
     hour: startTime.toTimeString().slice(0, 5),
     location: session.location || "",
-    speakerPhoto: null, // Add this
-    speakerPhotoUrl: session.speaker_photo_url || "", // Add this
-    speakerPhotoType: "link", // Add this
-    speakerLinkedIn: session.speaker_linkedin_url || "" // Add this
+    speakerPhoto: null,
+    speakerPhotoUrl: session.speaker_photo_url || "",
+    speakerPhotoType: "link",
+    speakerLinkedIn: session.speaker_linkedin_url || ""
   });
   setEditSessionModal(true);
   setSessionDetailModal(false);
 };
-
 const handleEditEvent = (event: EventItem) => {
   setSelectedEventEdit(event);
   const startTime = new Date(event.start_time);
@@ -974,10 +1015,16 @@ const handleEditEvent = (event: EventItem) => {
     endTime: endTime ? endTime.toTimeString().slice(0, 5) : "",
     location: event.location || "",
     type: event.item_type || "general",
+    speaker: event.speaker || "", // Add this
+    speakerPhoto: null, // Add this
+    speakerPhotoUrl: event.speaker_photo_url || "", // Add this
+    speakerPhotoType: "link", // Add this
+    speakerLinkedIn: event.speaker_linkedin_url || "" // Add this
   });
   setEditEventModal(true);
-  setEventDetailModal(false); // Close detail modal when editing
+  setEventDetailModal(false);
 };
+  
   const handleEventClick = (event: EventItem) => {
     setSelectedEventDetail(event);
     setEventDetailModal(true);
@@ -993,12 +1040,16 @@ const handleSessionUpdate = async () => {
   try {
     const startDateTime = new Date(`${editSession.date}T${editSession.hour}`);
     const endDateTime = new Date(startDateTime.getTime() + 2 * 60 * 60 * 1000);
+    
+    // Handle capacity conversion - use max_attendees as the source of truth
     let capacityValue: number | null = null;
-    if (typeof editSession.capacity === 'number') {
-      capacityValue = editSession.capacity;
-    } else if (typeof editSession.capacity === 'string') {
-      const parsed = parseInt(editSession.capacity, 10);
-      capacityValue = isNaN(parsed) ? null : parsed;
+    if (editSession.capacity !== "" && editSession.capacity !== null) {
+      if (typeof editSession.capacity === 'number') {
+        capacityValue = editSession.capacity;
+      } else if (typeof editSession.capacity === 'string') {
+        const parsed = parseInt(editSession.capacity, 10);
+        capacityValue = isNaN(parsed) ? null : parsed;
+      }
     }
 
     // Handle speaker photo upload
@@ -1027,19 +1078,25 @@ const handleSessionUpdate = async () => {
       speakerPhotoUrl = urlData.publicUrl;
     }
 
-    const { error } = await supabase.from("sessions").update({
+    // Update both capacity and max_attendees fields
+    const updateData = {
       title: editSession.title,
       description: editSession.description,
       speaker: editSession.speaker,
       start_time: startDateTime.toISOString(),
       end_time: endDateTime.toISOString(),
       location: editSession.location,
-      capacity: capacityValue,
-      max_attendees: capacityValue,
       session_type: editSession.type,
       speaker_photo_url: speakerPhotoUrl,
-      speaker_linkedin_url: editSession.speakerLinkedIn
-    }).eq('id', editSession.id);
+      speaker_linkedin_url: editSession.speakerLinkedIn,
+      capacity: capacityValue, // Update capacity field
+      max_attendees: capacityValue // Also update max_attendees field
+    };
+
+    const { error } = await supabase
+      .from("sessions")
+      .update(updateData)
+      .eq('id', editSession.id);
 
     if (error) {
       showFeedback("Failed to update session", "error");
@@ -1069,32 +1126,61 @@ const handleSessionUpdate = async () => {
     setLoading(false);
   }
 };
-  const handleEventUpdate = async () => {
-    if (!editEvent.title || !editEvent.startDate || !editEvent.startTime) {
-      showFeedback("Please fill all required fields!", "error");
-      return;
+const handleEventUpdate = async () => {
+  if (!editEvent.title || !editEvent.startDate || !editEvent.startTime) {
+    showFeedback("Please fill all required fields!", "error");
+    return;
+  }
+
+  setLoading(true);
+  try {
+    const startDateTime = new Date(`${editEvent.startDate}T${editEvent.startTime}`);
+    const endDateTime = editEvent.endDate && editEvent.endTime 
+      ? new Date(`${editEvent.endDate}T${editEvent.endTime}`)
+      : new Date(startDateTime.getTime() + 2 * 60 * 60 * 1000);
+
+    // Handle speaker photo upload
+    let speakerPhotoUrl = editEvent.speakerPhotoUrl;
+
+    if (editEvent.speakerPhotoType === "upload" && editEvent.speakerPhoto) {
+      const fileExt = editEvent.speakerPhoto.name.split('.').pop();
+      const fileName = `${Date.now()}-${editEvent.speaker.replace(/[^a-zA-Z0-9]/g, '_')}.${fileExt}`;
+      const filePath = `speakers/${fileName}`;
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("Assets")
+        .upload(filePath, editEvent.speakerPhoto);
+
+      if (uploadError) {
+        console.error("Speaker photo upload error:", uploadError);
+        showFeedback("Failed to upload speaker photo", "error");
+        setLoading(false);
+        return;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from("Assets")
+        .getPublicUrl(filePath);
+
+      speakerPhotoUrl = urlData.publicUrl;
     }
 
-    setLoading(true);
-    try {
-      const startDateTime = new Date(`${editEvent.startDate}T${editEvent.startTime}`);
-      const endDateTime = editEvent.endDate && editEvent.endTime 
-        ? new Date(`${editEvent.endDate}T${editEvent.endTime}`)
-        : new Date(startDateTime.getTime() + 2 * 60 * 60 * 1000);
+    const { error } = await supabase.from("schedule_items").update({
+      title: editEvent.title,
+      description: editEvent.description,
+      speaker: editEvent.speaker, // Add this
+      start_time: startDateTime.toISOString(),
+      end_time: endDateTime.toISOString(),
+      location: editEvent.location,
+      item_type: editEvent.type,
+      speaker_photo_url: speakerPhotoUrl, // Add this
+      speaker_linkedin_url: editEvent.speakerLinkedIn // Add this
+    }).eq('id', editEvent.id);
 
-      const { error } = await supabase.from("schedule_items").update({
-        title: editEvent.title,
-        description: editEvent.description,
-        start_time: startDateTime.toISOString(),
-        end_time: endDateTime.toISOString(),
-        location: editEvent.location,
-        item_type: editEvent.type,
-      }).eq('id', editEvent.id);
-
-      if (error) {
+    if (error) {
       showFeedback("Failed to update event", "error");
     } else {
-      setEditEventModal(false); // Close edit modal
+      setEditEventModal(false);
       setEditEvent({
         id: "",
         title: "",
@@ -1105,6 +1191,11 @@ const handleSessionUpdate = async () => {
         endTime: "",
         location: "",
         type: "general",
+        speaker: "", // Reset
+        speakerPhoto: null, // Reset
+        speakerPhotoUrl: "", // Reset
+        speakerPhotoType: "link", // Reset
+        speakerLinkedIn: "" // Reset
       });
       showFeedback("Event updated successfully!", "success");
       await fetchEventsByDay(activeDay);
@@ -1115,7 +1206,7 @@ const handleSessionUpdate = async () => {
     setLoading(false);
   }
 };
-
+  
 const handleEditCompany = (company: CompanyItem) => {
   setSelectedCompanyEdit(company);
   setEditCompany({
@@ -2705,53 +2796,85 @@ const handleSessionSubmit = async () => {
     }
   };
 
-  // Handle Event Submit
-  const handleEventSubmit = async () => {
-    if (!newEvent.title || !newEvent.startDate || !newEvent.startTime) {
-      showFeedback("Please fill all required fields!", "error");
-      return;
-    }
+const handleEventSubmit = async () => {
+  if (!newEvent.title || !newEvent.startDate || !newEvent.startTime) {
+    showFeedback("Please fill all required fields!", "error");
+    return;
+  }
 
-    setLoading(true);
-    try {
-      const startDateTime = new Date(`${newEvent.startDate}T${newEvent.startTime}`);
-      const endDateTime = newEvent.endDate && newEvent.endTime 
-        ? new Date(`${newEvent.endDate}T${newEvent.endTime}`)
-        : new Date(startDateTime.getTime() + 2 * 60 * 60 * 1000);
+  setLoading(true);
+  try {
+    const startDateTime = new Date(`${newEvent.startDate}T${newEvent.startTime}`);
+    const endDateTime = newEvent.endDate && newEvent.endTime 
+      ? new Date(`${newEvent.endDate}T${newEvent.endTime}`)
+      : new Date(startDateTime.getTime() + 2 * 60 * 60 * 1000);
 
-      const { error } = await supabase.from("schedule_items").insert({
-        title: newEvent.title,
-        description: newEvent.description,
-        start_time: startDateTime.toISOString(),
-        end_time: endDateTime.toISOString(),
-        location: newEvent.location,
-        item_type: newEvent.type,
-      });
+    // Handle speaker photo upload
+    let speakerPhotoUrl = newEvent.speakerPhotoUrl;
 
-      if (error) {
-        showFeedback("Failed to add event", "error");
-      } else {
-        setEventModal(false);
-        setNewEvent({
-          title: "",
-          description: "",
-          startDate: "",
-          endDate: "",
-          startTime: "",
-          endTime: "",
-          location: "",
-          type: "general",
-        });
-        showFeedback("Event added successfully!", "success");
-        await fetchEventsByDay(activeDay);
+    if (newEvent.speakerPhotoType === "upload" && newEvent.speakerPhoto) {
+      const fileExt = newEvent.speakerPhoto.name.split('.').pop();
+      const fileName = `${Date.now()}-${newEvent.speaker.replace(/[^a-zA-Z0-9]/g, '_')}.${fileExt}`;
+      const filePath = `speakers/${fileName}`;
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("Assets")
+        .upload(filePath, newEvent.speakerPhoto);
+
+      if (uploadError) {
+        console.error("Speaker photo upload error:", uploadError);
+        showFeedback("Failed to upload speaker photo", "error");
+        setLoading(false);
+        return;
       }
-    } catch (err) {
-      showFeedback("Failed to add event", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
 
+      const { data: urlData } = supabase.storage
+        .from("Assets")
+        .getPublicUrl(filePath);
+
+      speakerPhotoUrl = urlData.publicUrl;
+    }
+
+    const { error } = await supabase.from("schedule_items").insert({
+      title: newEvent.title,
+      description: newEvent.description,
+      speaker: newEvent.speaker, // Add this
+      start_time: startDateTime.toISOString(),
+      end_time: endDateTime.toISOString(),
+      location: newEvent.location,
+      item_type: newEvent.type,
+      speaker_photo_url: speakerPhotoUrl, // Add this
+      speaker_linkedin_url: newEvent.speakerLinkedIn // Add this
+    });
+
+    if (error) {
+      showFeedback("Failed to add event", "error");
+    } else {
+      setEventModal(false);
+      setNewEvent({
+        title: "",
+        description: "",
+        startDate: "",
+        endDate: "",
+        startTime: "",
+        endTime: "",
+        location: "",
+        type: "general",
+        speaker: "", // Reset
+        speakerPhoto: null, // Reset
+        speakerPhotoUrl: "", // Reset
+        speakerPhotoType: "link", // Reset
+        speakerLinkedIn: "" // Reset
+      });
+      showFeedback("Event added successfully!", "success");
+      await fetchEventsByDay(activeDay);
+    }
+  } catch (err) {
+    showFeedback("Failed to add event", "error");
+  } finally {
+    setLoading(false);
+  }
+};
   const handleDeleteSession = async (session: SessionItem) => {
     setSelectedSessionDelete(session);
     setDeleteSessionModal(true);
@@ -3370,6 +3493,21 @@ const handleSessionSubmit = async () => {
                 {events.map((event) => (
                   <div key={event.id} className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover smooth-hover">
                     <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">{event.title}</h3>
+                          {event.speaker && (
+        <p className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Speaker: {event.speaker}</p>
+      )}
+      {event.speaker_photo_url && (
+        <div className="mt-2">
+          <img 
+            src={event.speaker_photo_url} 
+            alt={`${event.speaker} photo`}
+            className="h-12 w-12 rounded-full object-cover"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/48x48/gray/white?text=Photo";
+            }}
+          />
+        </div>
+      )}
                     <p className="text-xs sm:text-sm text-gray-600 mb-3">{event.description}</p>
                     <div className="space-y-1 text-xs text-gray-500 mb-4">
                       <div className="flex items-center">
@@ -3966,7 +4104,7 @@ const handleSessionSubmit = async () => {
   document.body
 )}
 {/* Edit Event Modal */}
-          {editEventModal && selectedEventEdit && createPortal(
+{editEventModal && selectedEventEdit && createPortal(
   <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
     <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto modal-content-blur fade-in-up-blur">
       <div className="flex items-center justify-between mb-4 sm:mb-6 fade-in-blur">
@@ -4003,6 +4141,20 @@ const handleSessionSubmit = async () => {
             className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
             placeholder="Enter event description"
             rows={3}
+          />
+        </div>
+
+        {/* Add Speaker Field */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Speaker
+          </label>
+          <input
+            type="text"
+            value={editEvent.speaker}
+            onChange={(e) => setEditEvent({ ...editEvent, speaker: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="Enter speaker name"
           />
         </div>
 
@@ -4069,6 +4221,89 @@ const handleSessionSubmit = async () => {
           />
         </div>
 
+        {/* Add Speaker LinkedIn URL */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Speaker LinkedIn Profile URL
+          </label>
+          <input
+            type="url"
+            value={editEvent.speakerLinkedIn}
+            onChange={(e) => setEditEvent({ ...editEvent, speakerLinkedIn: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+            placeholder="https://linkedin.com/in/speaker-profile"
+          />
+        </div>
+
+        {/* Add Speaker Photo */}
+        <div className="fade-in-blur">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Speaker Photo
+          </label>
+          <div className="flex space-x-2 sm:space-x-4 mb-3">
+            <button
+              type="button"
+              onClick={() => setEditEvent({ ...editEvent, speakerPhotoType: "link" })}
+              className={`flex items-center px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
+                editEvent.speakerPhotoType === "link" 
+                  ? "bg-blue-500 text-white" 
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              <Link className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+              URL
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditEvent({ ...editEvent, speakerPhotoType: "upload" })}
+              className={`flex items-center px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
+                editEvent.speakerPhotoType === "upload" 
+                  ? "bg-blue-500 text-white" 
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              <Upload className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+              Upload New
+            </button>
+          </div>
+          
+          {editEvent.speakerPhotoType === "link" ? (
+            <input
+              type="url"
+              value={editEvent.speakerPhotoUrl}
+              onChange={(e) => setEditEvent({ ...editEvent, speakerPhotoUrl: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+              placeholder="https://example.com/speaker-photo.jpg"
+            />
+          ) : (
+            <div>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setEditEvent({ ...editEvent, speakerPhoto: e.target.files?.[0] || null })}
+                className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Leave empty to keep current photo
+              </p>
+            </div>
+          )}
+          
+          {editEvent.speakerPhotoUrl && (
+            <div className="mt-3 p-3 bg-gray-50 rounded-lg fade-in-blur">
+              <p className="text-sm text-gray-600 mb-2">Current Speaker Photo:</p>
+              <img 
+                src={editEvent.speakerPhotoUrl} 
+                alt="Current speaker" 
+                className="h-16 w-16 object-cover rounded-lg"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/64x64/gray/white?text=Photo";
+                }}
+              />
+            </div>
+          )}
+        </div>
+
         <div className="fade-in-blur">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Event Type
@@ -4113,7 +4348,6 @@ const handleSessionSubmit = async () => {
   </div>,
   document.body
 )}
-
 {/* Edit Session Modal */}
 {editSessionModal && selectedSessionEdit && createPortal(
   <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 modal-backdrop-blur">
@@ -5341,7 +5575,45 @@ const handleSessionSubmit = async () => {
               </div>
             )}
           </div>
-
+          {/* Add this section to the Event Detail Modal */}
+          {selectedEventDetail?.speaker && (
+            <div className="fade-in-blur">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Speaker</label>
+              <p className="text-gray-900 text-sm sm:text-base">{selectedEventDetail.speaker}</p>
+            </div>
+          )}
+          
+          {(selectedEventDetail?.speaker_photo_url || selectedEventDetail?.speaker_linkedin_url) && (
+            <div className="fade-in-blur">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Speaker Details</label>
+              <div className="flex items-center space-x-4">
+                {selectedEventDetail?.speaker_photo_url && (
+                  <img 
+                    src={selectedEventDetail.speaker_photo_url} 
+                    alt={`${selectedEventDetail.speaker} photo`}
+                    className="h-16 w-16 rounded-full object-cover"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/64x64/gray/white?text=Photo";
+                    }}
+                  />
+                )}
+                <div>
+                  <p className="text-gray-900 font-medium">{selectedEventDetail?.speaker}</p>
+                  {selectedEventDetail?.speaker_linkedin_url && (
+                    <a 
+                      href={selectedEventDetail.speaker_linkedin_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 text-sm flex items-center"
+                    >
+                      <Link className="h-3 w-3 mr-1" />
+                      LinkedIn Profile
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           {/* Action Buttons */}
           <div className="pt-4 space-y-3 fade-in-blur">
             <div className="grid grid-cols-2 gap-3">
@@ -5866,7 +6138,86 @@ const handleSessionSubmit = async () => {
           </select>
         </div>
       </div>
+{/* Add these fields to the Add Event Modal */}
+<div className="fade-in-blur">
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    Speaker
+  </label>
+  <input
+    type="text"
+    value={newEvent.speaker}
+    onChange={(e) => setNewEvent({ ...newEvent, speaker: e.target.value })}
+    className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+    placeholder="Enter speaker name"
+  />
+</div>
 
+<div className="fade-in-blur">
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    Speaker LinkedIn Profile URL
+  </label>
+  <input
+    type="url"
+    value={newEvent.speakerLinkedIn}
+    onChange={(e) => setNewEvent({ ...newEvent, speakerLinkedIn: e.target.value })}
+    className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+    placeholder="https://linkedin.com/in/speaker-profile"
+  />
+</div>
+
+<div className="fade-in-blur">
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    Speaker Photo
+  </label>
+  <div className="flex space-x-2 sm:space-x-4 mb-3">
+    <button
+      type="button"
+      onClick={() => setNewEvent({ ...newEvent, speakerPhotoType: "link" })}
+      className={`flex items-center px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
+        newEvent.speakerPhotoType === "link" 
+          ? "bg-blue-500 text-white" 
+          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+      }`}
+    >
+      <Link className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+      URL
+    </button>
+    <button
+      type="button"
+      onClick={() => setNewEvent({ ...newEvent, speakerPhotoType: "upload" })}
+      className={`flex items-center px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
+        newEvent.speakerPhotoType === "upload" 
+          ? "bg-blue-500 text-white" 
+          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+      }`}
+    >
+      <Upload className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+      Upload
+    </button>
+  </div>
+  
+  {newEvent.speakerPhotoType === "link" ? (
+    <input
+      type="url"
+      value={newEvent.speakerPhotoUrl}
+      onChange={(e) => setNewEvent({ ...newEvent, speakerPhotoUrl: e.target.value })}
+      className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+      placeholder="https://example.com/speaker-photo.jpg"
+    />
+  ) : (
+    <div>
+      <input
+        type="file"
+        accept="image/*"
+        onChange={(e) => setNewEvent({ ...newEvent, speakerPhoto: e.target.files?.[0] || null })}
+        className="w-full border border-gray-300 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300"
+      />
+      <p className="text-xs text-gray-500 mt-1">
+        Supported formats: PNG, JPG, SVG. Max size: 5MB
+      </p>
+    </div>
+  )}
+</div>
       <div className="flex justify-end space-x-3 mt-6 fade-in-blur">
         <button
           onClick={() => setEventModal(false)}
