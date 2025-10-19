@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { createPortal } from 'react-dom';
 import {
   Users,
@@ -502,7 +502,244 @@ const [newEvent, setNewEvent] = useState<{
   const [isTabChanging, setIsTabChanging] = useState(false);
   const [previousTab, setPreviousTab] = useState("dashboard");
 
-  // Handle tab change with animation
+  const StatCard: React.FC<{ 
+  title: string; 
+  value: number | string | JSX.Element; 
+  icon: JSX.Element; 
+  color: 'blue' | 'green' | 'purple' | 'orange' | 'red'; 
+}> = ({ title, value, icon, color }) => {
+  const colorClasses = {
+    blue: 'bg-blue-500',
+    green: 'bg-green-500',
+    purple: 'bg-purple-500',
+    orange: 'bg-orange-500',
+    red: 'bg-red-500'
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-600">{title}</p>
+          <p className="text-3xl font-bold text-gray-900">{value}</p>
+        </div>
+        <div className={`w-12 h-12 ${colorClasses[color]} bg-opacity-10 rounded-lg flex items-center justify-center`}>
+          <div className={colorClasses[color].replace('bg-', 'text-')}>
+            {icon}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Current State Widget Component
+const CurrentStateWidget = () => {
+  const [currentState, setCurrentState] = useState({
+    building: { current: 0, max: 350, percentage: 0, status: 'good' },
+    event: { current: 0, max: 1500, percentage: 0, status: 'good' }
+  });
+
+  useEffect(() => {
+    fetchCurrentState();
+  }, []);
+
+  const fetchCurrentState = async () => {
+    try {
+      const { data: buildingData } = await supabase
+        .from('users_profiles')
+        .select('building_entry, event_entry')
+        .eq('role', 'attendee');
+
+      if (buildingData) {
+        const currentInBuilding = buildingData.filter(user => user.building_entry).length;
+        const currentInEvent = buildingData.filter(user => user.event_entry).length;
+        
+        const buildingPercentage = Math.round((currentInBuilding / 350) * 100);
+        const eventPercentage = Math.round((currentInEvent / 1500) * 100);
+
+        setCurrentState({
+          building: {
+            current: currentInBuilding,
+            max: 350,
+            percentage: buildingPercentage,
+            status: buildingPercentage < 80 ? 'good' : buildingPercentage < 90 ? 'warning' : 'critical'
+          },
+          event: {
+            current: currentInEvent,
+            max: 1500,
+            percentage: eventPercentage,
+            status: eventPercentage < 80 ? 'good' : eventPercentage < 90 ? 'warning' : 'critical'
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching current state:', error);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'good': return 'bg-green-100 text-green-800';
+      case 'warning': return 'bg-yellow-100 text-yellow-800';
+      case 'critical': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden fade-in-blur card-hover">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50">
+        <h2 className="text-3xl font-bold text-black-800 flex items-center gap-2">
+          <Activity className="h-7 w-7 text-orange-500" />
+          Current State
+        </h2>
+      </div>
+
+      <div className="p-6">
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-lg font-bold text-left border border-gray-200 rounded-lg overflow-hidden">
+            <thead className="bg-gray-100 text-gray-800 text-xl font-extrabold">
+              <tr>
+                <th className="px-4 py-3">Site</th>
+                <th className="px-4 py-3">Maximum Capacity</th>
+                <th className="px-4 py-3">Current Capacity</th>
+                <th className="px-4 py-3">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-t">
+                <td className="px-4 py-3">Building</td>
+                <td className="px-4 py-3 text-red-600">350</td>
+                <td className="px-4 py-3">{currentState.building.current}</td>
+                <td className="px-4 py-3">
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(currentState.building.status)}`}>
+                    {currentState.building.percentage}%
+                  </span>
+                </td>
+              </tr>
+              <tr className="border-t">
+                <td className="px-4 py-3">Event</td>
+                <td className="px-4 py-3 text-red-600">1500</td>
+                <td className="px-4 py-3">{currentState.event.current}</td>
+                <td className="px-4 py-3">
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(currentState.event.status)}`}>
+                    {currentState.event.percentage}%
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Today's Event Entries Component
+const TodayEventEntries = () => {
+  const [todayEntries, setTodayEntries] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchTodayEntries();
+  }, []);
+
+  const fetchTodayEntries = async () => {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const { count, error } = await supabase
+        .from('attendances')
+        .select('*', { count: 'exact', head: true })
+        .eq('scan_type', 'entry')
+        .gte('scanned_at', today.toISOString());
+
+      if (!error && count !== null) {
+        setTodayEntries(count);
+      }
+    } catch (error) {
+      console.error('Error fetching today entries:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
+      <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+        <Calendar className="h-5 w-5 mr-2 text-orange-600" />
+        Today's Event Activity
+      </h3>
+      
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          title="Event Entries Today"
+          value={loading ? '...' : todayEntries}
+          icon={<TrendingUp className="h-5 w-5" />}
+          color="green"
+        />
+        <StatCard
+          title="Current in Event"
+          value={buildingStats?.inside_event || 0}
+          icon={<Users className="h-5 w-5" />}
+          color="blue"
+        />
+        <StatCard
+          title="Current in Building"
+          value={buildingStats?.inside_building || 0}
+          icon={<Building className="h-5 w-5" />}
+          color="orange"
+        />
+        <StatCard
+          title="Total Attendees"
+          value={buildingStats?.total_attendees || 0}
+          icon={<Users className="h-5 w-5" />}
+          color="purple"
+        />
+      </div>
+    </div>
+  );
+};
+
+// Simplified Attendance Flow Chart
+// Update the AttendanceFlowChart component to this:
+
+const AttendanceFlowChart: React.FC<{ stats: { 
+  entries: number; 
+  exits: number; 
+  building_entries: number; 
+  session_entries: number; 
+} }> = ({ stats }) => {
+  const flowData = [
+    { label: 'Entries', value: stats.entries, color: 'bg-green-500' },
+    { label: 'Exits', value: stats.exits, color: 'bg-red-500' },
+    { label: 'Building Entries', value: stats.building_entries, color: 'bg-blue-500' },
+    { label: 'Session Entries', value: stats.session_entries, color: 'bg-purple-500' },
+  ];
+
+  const maxValue = Math.max(...flowData.map(d => d.value), 1);
+
+  return (
+    <div className="space-y-3 fade-in-blur">
+      {flowData.map((item, index) => (
+        <div key={index} className="space-y-1">
+          <div className="flex justify-between text-sm">
+            <span className="font-medium text-gray-700">{item.label}</span>
+            <span className="text-gray-500">{item.value}</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-3">
+            <div
+              className={`${item.color} h-3 rounded-full`}
+              style={{ width: `${(item.value / maxValue) * 100}%` }}
+            ></div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
   const handleTabChange = (tabKey: string) => {
     if (tabKey === activeTab) return;
     
@@ -1230,34 +1467,6 @@ const handleEditCompany = (company: CompanyItem) => {
   setEditHrEmails(company.hr_mails || []); // Add this
   setEditCompanyModal(true);
 };
-
-  // Enhanced Stat Card Component with animations
-  const StatCard: React.FC<{ title: string; value: number | string | JSX.Element; icon: JSX.Element; color: 'blue' | 'green' | 'purple' | 'orange' | 'red'; }> = ({ title, value, icon, color }) => {
-    const colorClasses = {
-      blue: 'bg-blue-500',
-      green: 'bg-green-500',
-      purple: 'bg-purple-500',
-      orange: 'bg-orange-500',
-      red: 'bg-red-500'
-    };
-
-    return (
-      <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-gray-600">{title}</p>
-            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{value}</p>
-          </div>
-          <div className={`w-10 h-10 sm:w-12 sm:h-12 ${colorClasses[color]} bg-opacity-10 rounded-lg flex items-center justify-center`}>
-            <div className={colorClasses[color].replace('bg-', 'text-')}>
-              {icon}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   // Gender Chart Component
   const GenderChart: React.FC<{ data: { male: number; female: number }; title?: string }> = ({ data, title = "Gender Distribution" }) => {
     const total = data.male + data.female;
@@ -1554,444 +1763,229 @@ const handleEditCompany = (company: CompanyItem) => {
   };
 
   // Enhanced StatisticsTab Component with Fixed Today Filter
-  const StatisticsTab = () => {
-    const [statsData, setStatsData] = useState<StatsData>({
-      totalRegistrations: 0,
-      graduates: 0,
-      students: 0,
-      currentInEvent: 0,
-      currentInBuilding: 0,
-      universities: [],
-      faculties: [],
-      genderStats: { male: 0, female: 0 },
-      roleStats: {},
-      marketingSources: [],
-      degreeLevelStats: { student: 0, graduate: 0 },
-      classYearStats: {},
-      currentGenderStats: { male: 0, female: 0 },
-      eventStats: {
-        day1: { entries: 0, exits: 0, building_entries: 0, building_exits: 0, session_entries: 0, registrations: 0 },
-        day2: { entries: 0, exits: 0, building_entries: 0, building_exits: 0, session_entries: 0, registrations: 0 },
-        day3: { entries: 0, exits: 0, building_entries: 0, building_exits: 0, session_entries: 0, registrations: 0 },
-        day4: { entries: 0, exits: 0, building_entries: 0, building_exits: 0, session_entries: 0, registrations: 0 },
-        day5: { entries: 0, exits: 0, building_entries: 0, building_exits: 0, session_entries: 0, registrations: 0 }
-      }
-    });
-    const [loading, setLoading] = useState(true);
-    const [timeRange, setTimeRange] = useState('all');
-    const [statsType, setStatsType] = useState('registration');
-    const [selectedDay, setSelectedDay] = useState(1);
+// Simplified StatisticsTab Component - Event Only
+// Replace the existing StatisticsTab component with this:
 
-    useEffect(() => {
-      fetchStatistics();
-    }, [timeRange, statsType, selectedDay]);
+// Replace the existing StatisticsTab component with this:
 
-    const fetchStatistics = async () => {
-      setLoading(true);
-      try {
-        if (statsType === 'registration') {
-          await fetchRegistrationStats();
-        } else {
-          await fetchEventStats();
-        }
-      } catch (error) {
-        console.error('Error fetching statistics:', error);
-        setStatsData(prev => ({
-          ...prev,
-          eventStats: {
-            day1: { entries: 0, exits: 0, building_entries: 0, building_exits: 0, session_entries: 0, registrations: 0 },
-            day2: { entries: 0, exits: 0, building_entries: 0, building_exits: 0, session_entries: 0, registrations: 0 },
-            day3: { entries: 0, exits: 0, building_entries: 0, building_exits: 0, session_entries: 0, registrations: 0 },
-            day4: { entries: 0, exits: 0, building_entries: 0, building_exits: 0, session_entries: 0, registrations: 0 },
-            day5: { entries: 0, exits: 0, building_entries: 0, building_exits: 0, session_entries: 0, registrations: 0 }
-          }
-        }));
-      } finally {
-        setLoading(false);
-      }
+const StatisticsTab = () => {
+  const [stats, setStats] = useState<{
+    day: number;
+    date: string;
+    attendance_stats: {
+      entries: number;
+      exits: number;
+      building_entries: number;
+      session_entries: number;
     };
-
-    const fetchEventStats = async () => {
-      try {
-        // Calculate the date for the selected day (Day 1 = Oct 19, 2025)
-        const eventStartDate = new Date('2025-10-19');
-        const targetDate = new Date(eventStartDate);
-        targetDate.setDate(eventStartDate.getDate() + (selectedDay - 1));
-        
-        const startOfDay = new Date(targetDate);
-        startOfDay.setHours(0, 0, 0, 0);
-        
-        const endOfDay = new Date(targetDate);
-        endOfDay.setHours(23, 59, 59, 999);
-
-        const { data: attendances, error } = await supabase
-          .from('attendances')
-          .select('*')
-          .gte('scanned_at', startOfDay.toISOString())
-          .lte('scanned_at', endOfDay.toISOString());
-
-        if (error) throw error;
-
-        const dayStats = processEventStatistics(attendances || []);
-        
-        setStatsData(prev => ({
-          ...prev,
-          eventStats: {
-            ...prev.eventStats,
-            [`day${selectedDay}`]: dayStats
-          }
-        }));
-      } catch (error) {
-        console.error('Error fetching event stats:', error);
-        throw error;
-      }
+    current_state: {
+      current_in_event: number;
+      current_in_building: number;
     };
-
-    const fetchRegistrationStats = async () => {
-      try {
-        if (timeRange === 'today') {
-          // Use the edge function for today's stats to avoid 1000 row limit
-          const { data: todayStats, error } = await supabase.rpc('get_today_registration_stats');
-          
-          if (error) {
-            console.error('Error fetching today stats:', error);
-            // Fallback to regular query
-            await fetchTodayStatsFallback();
-          } else if (todayStats && todayStats.length > 0) {
-            const stats = todayStats[0];
-            setStatsData(prev => ({
-              ...prev,
-              totalRegistrations: Number(stats.total_registrations) || 0,
-              graduates: Number(stats.graduates) || 0,
-              students: Number(stats.students) || 0,
-              currentInEvent: Number(stats.current_in_event) || 0,
-              currentInBuilding: Number(stats.current_in_building) || 0,
-              genderStats: {
-                male: Number(stats.male_count) || 0,
-                female: Number(stats.female_count) || 0
-              },
-              degreeLevelStats: {
-                student: Number(stats.student_count) || 0,
-                graduate: Number(stats.graduate_count) || 0
-              },
-              // For today, we'll keep other arrays empty to avoid heavy queries
-              universities: [],
-              faculties: [],
-              roleStats: {},
-              marketingSources: [],
-              classYearStats: {},
-              currentGenderStats: { male: 0, female: 0 }
-            }));
-          }
-        } else {
-          // All time - use the existing logic
-          let query = supabase
-            .from('users_profiles')
-            .select('*', { count: 'exact' });
-
-          const { data: users, error, count } = await query;
-
-          if (error) {
-            console.error('Query error:', error);
-            throw error;
-          }
-
-          let allUsers = users || [];
-          
-          if (count && count > 1000) {
-            const pageSize = 1000;
-            const totalPages = Math.ceil(count / pageSize);
-            allUsers = [];
-            
-            for (let page = 0; page < totalPages; page++) {
-              const { data: pageUsers, error: pageError } = await supabase
-                .from('users_profiles')
-                .select('*')
-                .range(page * pageSize, (page + 1) * pageSize - 1);
-                
-              if (pageError) throw pageError;
-              if (pageUsers) allUsers = [...allUsers, ...pageUsers];
-            }
-          }
-
-          const stats = processUserStatistics(allUsers as UserProfileItem[]);
-          setStatsData(prev => ({ ...prev, ...stats } as StatsData));
-        }
-      } catch (error) {
-        console.error('Error fetching registration stats:', error);
-        await fetchRegistrationStatsFallback();
-      }
+    degree_stats: {
+      students: number;
+      graduates: number;
+      total: number;
+      student_percentage: number;
+      graduate_percentage: number;
     };
+    university_stats: Array<{
+      name: string;
+      count: number;
+      percentage: number;
+    }>;
+  } | null>(null);
+  
+  const [loading, setLoading] = useState(true);
+  const [selectedDay, setSelectedDay] = useState(1);
 
-    const fetchTodayStatsFallback = async () => {
-      try {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
-        const todayStart = today.toISOString();
-        const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString();
-        
-        const { count, error } = await supabase
-          .from('users_profiles')
-          .select('*', { count: 'exact', head: true })
-          .gte('created_at', todayStart)
-          .lt('created_at', todayEnd);
+  useEffect(() => {
+    fetchEventStats(selectedDay);
+  }, [selectedDay]);
 
-        if (!error && count !== null) {
-          setStatsData(prev => ({
-            ...prev,
-            totalRegistrations: count,
-            students: 0,
-            graduates: 0,
-            currentInEvent: 0,
-            currentInBuilding: 0,
-            universities: [],
-            faculties: [],
-            genderStats: { male: 0, female: 0 },
-            roleStats: {},
-            marketingSources: [],
-            degreeLevelStats: { student: 0, graduate: 0 },
-            classYearStats: {},
-            currentGenderStats: { male: 0, female: 0 }
-          }));
-        }
-      } catch (fallbackError) {
-        console.error('Fallback query also failed:', fallbackError);
-      }
-    };
+  const fetchEventStats = async (day: number) => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .rpc('get_event_stats', { selected_day: day });
 
-    const fetchRegistrationStatsFallback = async () => {
-      try {
-        let countQuery = supabase
-          .from('users_profiles')
-          .select('*', { count: 'exact', head: true });
-
-        if (timeRange === 'today') {
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const todayStart = today.toISOString();
-          const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString();
-          
-          countQuery = countQuery.gte('created_at', todayStart)
-                              .lt('created_at', todayEnd);
-        }
-
-        const { count, error: countError } = await countQuery;
-        
-        if (!countError && count !== null) {
-          setStatsData(prev => ({
-            ...prev,
-            totalRegistrations: count,
-            students: 0,
-            graduates: 0,
-            currentInEvent: 0,
-            currentInBuilding: 0,
-            universities: [],
-            faculties: [],
-            genderStats: { male: 0, female: 0 },
-            roleStats: {},
-            marketingSources: [],
-            degreeLevelStats: { student: 0, graduate: 0 },
-            classYearStats: {},
-            currentGenderStats: { male: 0, female: 0 }
-          }));
-        }
-      } catch (fallbackError) {
-        console.error('Fallback query also failed:', fallbackError);
-      }
-    };
-
-    const processUserStatistics = (users: UserProfileItem[]) => {
-      const stats: Omit<StatsData, 'eventStats'> = {
-        totalRegistrations: users.length,
-        graduates: 0,
-        students: 0,
-        currentInEvent: 0,
-        currentInBuilding: 0,
-        universities: [],
-        faculties: [],
-        genderStats: { male: 0, female: 0 },
-        roleStats: {},
-        marketingSources: [],
-        degreeLevelStats: { student: 0, graduate: 0 },
-        classYearStats: {},
-        currentGenderStats: { male: 0, female: 0 }
-      };
-    
-      const universityCount: Record<string, number> = {};
-      const facultyCount: Record<string, number> = {};
-      const roleCount: Record<string, number> = {};
-      const marketingCount: Record<string, number> = {};
-      const classYearCount: Record<string, number> = {};
-    
-      users.forEach(user => {
-        if (user.degree_level) {
-          const degreeLevel = user.degree_level.toString().toLowerCase();
-          if (degreeLevel === 'graduate') {
-            stats.graduates++;
-            stats.degreeLevelStats.graduate++;
-          } else if (degreeLevel === 'student') {
-            stats.students++;
-            stats.degreeLevelStats.student++;
-          }
-        }
-    
-        if (user.event_entry) stats.currentInEvent++;
-        if (user.building_entry) stats.currentInBuilding++;
-    
-        if (user.gender === 'male') {
-          stats.genderStats.male++;
-          if (user.event_entry) stats.currentGenderStats.male++;
-        } else if (user.gender === 'female') {
-          stats.genderStats.female++;
-          if (user.event_entry) stats.currentGenderStats.female++;
-        }
-    
-        if (user.university) {
-          universityCount[user.university] = (universityCount[user.university] || 0) + 1;
-        }
-    
-        if (user.faculty) {
-          facultyCount[user.faculty] = (facultyCount[user.faculty] || 0) + 1;
-        }
-    
-        if (user.role) {
-          roleCount[user.role] = (roleCount[user.role] || 0) + 1;
-        }
-    
-        if (user.how_did_hear_about_event) {
-          marketingCount[user.how_did_hear_about_event] = (marketingCount[user.how_did_hear_about_event] || 0) + 1;
-        }
-    
-        if (user.class) {
-          classYearCount[user.class] = (classYearCount[user.class] || 0) + 1;
-        }
+      if (error) throw error;
+      setStats(data);
+    } catch (error) {
+      console.error('Error fetching event stats:', error);
+      // Fallback to empty stats
+      setStats({
+        day,
+        date: new Date().toISOString().split('T')[0],
+        attendance_stats: { entries: 0, exits: 0, building_entries: 0, session_entries: 0 },
+        current_state: { current_in_event: 0, current_in_building: 0 },
+        degree_stats: { students: 0, graduates: 0, total: 0, student_percentage: 0, graduate_percentage: 0 },
+        university_stats: []
       });
-    
-      stats.universities = (Object.entries(universityCount) as Array<[string, number]>)
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 10);
-    
-      stats.faculties = (Object.entries(facultyCount) as Array<[string, number]>)
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 10);
-    
-      stats.roleStats = roleCount;
-      stats.marketingSources = (Object.entries(marketingCount) as Array<[string, number]>)
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count);
-    
-      stats.classYearStats = classYearCount;
-    
-      return stats;
-    };
-
-    const processEventStatistics = (attendances: Array<{ scan_type: string }>): DayStats => {
-      return {
-        entries: attendances.filter(a => a.scan_type === 'entry').length,
-        exits: attendances.filter(a => a.scan_type === 'exit').length,
-        building_entries: attendances.filter(a => a.scan_type === 'building_entry').length,
-        building_exits: attendances.filter(a => a.scan_type === 'building_exit').length,
-        session_entries: attendances.filter(a => a.scan_type === 'session_entry').length,
-        registrations: 0
-      };
-    };
-
-    if (loading) {
-      return (
-        <div className="flex items-center justify-center h-64 fade-in-blur">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
-        </div>
-      );
+    } finally {
+      setLoading(false);
     }
-
-    return (
-      <div className="space-y-6 sm:space-y-8 fade-in-blur">
-        {/* Stats Type and Time Range Filter */}
-        <div className="space-y-4 fade-in-blur">
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setStatsType('registration')}
-              className={`px-3 py-2 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
-                statsType === 'registration' 
-                  ? 'bg-orange-500 text-white' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Registration
-            </button>
-            <button
-              onClick={() => setStatsType('event')}
-              className={`px-3 py-2 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
-                statsType === 'event' 
-                  ? 'bg-orange-500 text-white' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Event
-            </button>
-          </div>
-
-          {statsType === 'registration' && (
-            <div className="flex flex-wrap gap-2 fade-in-blur">
-              <button
-                onClick={() => setTimeRange('today')}
-                className={`px-3 py-2 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
-                  timeRange === 'today' 
-                    ? 'bg-orange-500 text-white' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Today
-              </button>
-              <button
-                onClick={() => setTimeRange('all')}
-                className={`px-3 py-2 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
-                  timeRange === 'all' 
-                    ? 'bg-orange-500 text-white' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                All Time
-              </button>
-            </div>
-          )}
-
-          {statsType === 'event' && (
-            <div className="flex flex-wrap gap-2 fade-in-blur">
-              {[1, 2, 3, 4, 5].map((day) => (
-                <button
-                  key={day}
-                  onClick={() => setSelectedDay(day)}
-                  className={`px-3 py-2 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover ${
-                    selectedDay === day 
-                      ? 'bg-orange-500 text-white' 
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Day {day}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Conditional Content based on Stats Type */}
-        {statsType === 'registration' ? (
-          <RegistrationStatsView statsData={statsData} timeRange={timeRange} />
-        ) : (
-          <EventStatsView statsData={statsData} selectedDay={selectedDay} />
-        )}
-
-        {/* Current State Widget */}
-        <CurrentStateWidget statsData={statsData} />
-      </div>
-    );
   };
 
-  // Registration Stats View Component
+  // ... rest of your component JSX remains the same
+  return (
+    <div className="space-y-6 sm:space-y-8 fade-in-blur">
+      {/* Day Selector */}
+      <div className="flex flex-wrap gap-2 fade-in-blur">
+        {[1, 2, 3, 4, 5].map((day) => (
+          <button
+            key={day}
+            onClick={() => setSelectedDay(day)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 smooth-hover ${
+              selectedDay === day 
+                ? 'bg-orange-500 text-white' 
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Day {day} ({getDateForDay(day).split(',')[0]})
+          </button>
+        ))}
+      </div>
+
+      {/* Current Day Stats */}
+      <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          Day {stats?.day} - {getDateForDay(stats?.day || 1)}
+        </h3>
+        
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 stagger-children">
+          <StatCard
+            title="Entries"
+            value={stats?.attendance_stats.entries || 0}
+            icon={<TrendingUp className="h-5 w-5" />}
+            color="green"
+          />
+          <StatCard
+            title="Exits"
+            value={stats?.attendance_stats.exits || 0}
+            icon={<TrendingUp className="h-5 w-5" />}
+            color="red"
+          />
+          <StatCard
+            title="Building Entries"
+            value={stats?.attendance_stats.building_entries || 0}
+            icon={<Building className="h-5 w-5" />}
+            color="blue"
+          />
+          <StatCard
+            title="Session Entries"
+            value={stats?.attendance_stats.session_entries || 0}
+            icon={<Calendar className="h-5 w-5" />}
+            color="purple"
+          />
+        </div>
+      </div>
+
+      {/* Current State */}
+      <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Current State</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 stagger-children">
+          <StatCard
+            title="Currently in Event"
+            value={stats?.current_state.current_in_event || 0}
+            icon={<Users className="h-5 w-5" />}
+            color="orange"
+          />
+          <StatCard
+            title="Currently in Building"
+            value={stats?.current_state.current_in_building || 0}
+            icon={<Building className="h-5 w-5" />}
+            color="blue"
+          />
+        </div>
+      </div>
+
+      {/* Student-Graduate Ratio */}
+      {stats?.degree_stats && (
+        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Student-Graduate Ratio</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-gray-700">Students</span>
+                <span className="text-lg font-bold text-green-600">
+                  {stats.degree_stats.students} ({stats.degree_stats.student_percentage}%)
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-4">
+                <div
+                  className="bg-green-500 h-4 rounded-full"
+                  style={{ width: `${stats.degree_stats.student_percentage}%` }}
+                ></div>
+              </div>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-gray-700">Graduates</span>
+                <span className="text-lg font-bold text-blue-600">
+                  {stats.degree_stats.graduates} ({stats.degree_stats.graduate_percentage}%)
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-4">
+                <div
+                  className="bg-blue-500 h-4 rounded-full"
+                  style={{ width: `${stats.degree_stats.graduate_percentage}%` }}
+                ></div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="mt-4 text-center">
+            <p className="text-sm text-gray-600">
+              Total attendees with degree information: {stats.degree_stats.total}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* University Distribution */}
+      {stats?.university_stats && stats.university_stats.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Universities in Event</h3>
+          <div className="space-y-3">
+            {stats.university_stats.map((university, index) => (
+              <div key={index} className="space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span className="font-medium text-gray-700 truncate flex-1 mr-2">
+                    {university.name}
+                  </span>
+                  <span className="text-gray-500 whitespace-nowrap">
+                    {university.count} ({university.percentage}%)
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div
+                    className="bg-purple-500 h-3 rounded-full"
+                    style={{ width: `${university.percentage}%` }}
+                  ></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Activity Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 stagger-children">
+        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Attendance Flow</h3>
+          <AttendanceFlowChart stats={stats?.attendance_stats || { entries: 0, exits: 0, building_entries: 0, session_entries: 0 }} />
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Daily Activity</h3>
+          <DailyActivityChart selectedDay={selectedDay} />
+        </div>
+      </div>
+    </div>
+  );
+};
   const RegistrationStatsView: React.FC<{ statsData: StatsData; timeRange: string }> = ({ statsData, timeRange }) => (
     <div className="space-y-6 sm:space-y-8 fade-in-blur">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 stagger-children">
@@ -2256,187 +2250,64 @@ const handleEditCompany = (company: CompanyItem) => {
   };
   
   // Current State Widget
-  const CurrentStateWidget: React.FC<{ statsData: StatsData }> = ({ statsData }) => (
-    <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden fade-in-blur card-hover dashboard-card">
-      <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-100 bg-gray-50">
-        <h2 className="text-xl sm:text-3xl font-bold text-black-800 flex items-center gap-2 mx-auto">
-          <Activity className="h-5 w-5 sm:h-7 sm:w-7 text-orange-500" />
-          Current State
-        </h2>
-      </div>
 
-      <div className="p-4 sm:p-6">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm sm:text-lg font-bold text-left border border-gray-200 rounded-lg overflow-hidden">
-            <thead className="bg-gray-100 text-gray-800 text-sm sm:text-xl font-extrabold">
-              <tr>
-                <th className="px-3 sm:px-4 py-2 sm:py-3">Site</th>
-                <th className="px-3 sm:px-4 py-2 sm:py-3">Maximum Capacity</th>
-                <th className="px-3 sm:px-4 py-2 sm:py-3">Current Capacity</th>
-                <th className="px-3 sm:px-4 py-2 sm:py-3">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-t">
-                <td className="px-3 sm:px-4 py-2 sm:py-3">Building</td>
-                <td className="px-3 sm:px-4 py-2 sm:py-3 text-red-600">350</td>
-                <td className="px-3 sm:px-4 py-2 sm:py-3">{statsData.currentInBuilding}</td>
-                <td className="px-3 sm:px-4 py-2 sm:py-3">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    statsData.currentInBuilding < 280 
-                      ? 'bg-green-100 text-green-800' 
-                      : statsData.currentInBuilding < 315 
-                      ? 'bg-yellow-100 text-yellow-800' 
-                      : 'bg-red-100 text-red-800'
-                  }`}>
-                    {statsData.currentInBuilding > 0 ? Math.round((statsData.currentInBuilding / 350) * 100) : 0}%
-                  </span>
-                </td>
-              </tr>
-              <tr className="border-t">
-                <td className="px-3 sm:px-4 py-2 sm:py-3">Event</td>
-                <td className="px-3 sm:px-4 py-2 sm:py-3 text-red-600">1500</td>
-                <td className="px-3 sm:px-4 py-2 sm:py-3">{statsData.currentInEvent}</td>
-                <td className="px-3 sm:px-4 py-2 sm:py-3">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    statsData.currentInEvent < 1200 
-                      ? 'bg-green-100 text-green-800' 
-                      : statsData.currentInEvent < 1350 
-                      ? 'bg-yellow-100 text-yellow-800' 
-                      : 'bg-red-100 text-red-800'
-                  }`}>
-                    {statsData.currentInEvent > 0 ? Math.round((statsData.currentInEvent / 1500) * 100) : 0}%
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+
+const DailyActivityChart: React.FC<{ selectedDay: number }> = ({ selectedDay }) => {
+  const [dailyData, setDailyData] = useState<Array<{ hour: string; entries: number }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchDailyActivity(selectedDay);
+  }, [selectedDay]);
+
+  const fetchDailyActivity = async (day: number) => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .rpc('get_daily_activity_entries', { selected_day: day });
+
+      if (error) throw error;
+      setDailyData(data || []);
+    } catch (error) {
+      console.error('Error fetching daily activity:', error);
+      setDailyData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-32">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-500"></div>
       </div>
+    );
+  }
+
+  const maxValue = Math.max(...dailyData.map(d => d.entries), 1);
+
+  return (
+    <div className="space-y-4 fade-in-blur">
+      {dailyData.map((data, index) => (
+        <div key={index} className="space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="font-medium text-gray-700">{data.hour}</span>
+            <span className="text-green-600">Entries: {data.entries}</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-3">
+            <div
+              className="bg-green-500 h-3 rounded-full"
+              style={{ width: `${(data.entries / maxValue) * 100}%` }}
+            ></div>
+          </div>
+        </div>
+      ))}
+      {dailyData.length === 0 && (
+        <p className="text-gray-500 text-center">No entry data for this day</p>
+      )}
     </div>
   );
-
-  // Chart Components
-  const DailyActivityChart: React.FC<{ selectedDay: number }> = ({ selectedDay }) => {
-    const [dailyData, setDailyData] = useState<Array<{ hour: string; entries: number; exits: number }>>([]);
-
-    useEffect(() => {
-      fetchDailyActivity(selectedDay);
-    }, [selectedDay]);
-
-
-    
-    const fetchDailyActivity = async (day: number) => {
-      try {
-        // Calculate the date for the selected day (Day 1 = Oct 19, 2025)
-        const eventStartDate = new Date('2025-10-19');
-        const targetDate = new Date(eventStartDate);
-        targetDate.setDate(eventStartDate.getDate() + (day - 1));
-        
-        const startOfDay = new Date(targetDate);
-        startOfDay.setHours(0, 0, 0, 0);
-        
-        const endOfDay = new Date(targetDate);
-        endOfDay.setHours(23, 59, 59, 999);
-
-        const { data: attendances, error } = await supabase
-          .from('attendances')
-          .select('*')
-          .gte('scanned_at', startOfDay.toISOString())
-          .lte('scanned_at', endOfDay.toISOString())
-          .order('scanned_at', { ascending: true });
-
-        if (error) throw error;
-
-        const hourlyData: Record<string, { entries: number; exits: number }> = {};
-        (attendances || []).forEach((attendance: { scanned_at: string; scan_type: string }) => {
-          const hour = new Date(attendance.scanned_at).getHours();
-          const hourKey = `${hour}:00`;
-          
-          if (!hourlyData[hourKey]) {
-            hourlyData[hourKey] = { entries: 0, exits: 0 };
-          }
-          
-          if (attendance.scan_type === 'entry') {
-            hourlyData[hourKey].entries++;
-          } else if (attendance.scan_type === 'exit') {
-            hourlyData[hourKey].exits++;
-          }
-        });
-
-        const processedData = (Object.entries(hourlyData) as Array<[string, { entries: number; exits: number }]>)
-          .map(([hour, data]) => ({ hour, entries: data.entries, exits: data.exits }))
-          .sort((a, b) => a.hour.localeCompare(b.hour));
-
-        setDailyData(processedData);
-      } catch (error) {
-        console.error('Error fetching daily activity:', error);
-        setDailyData([]);
-      }
-    };
-
-    const maxValue = Math.max(...dailyData.flatMap(d => [d.entries, d.exits]), 1);
-
-    return (
-      <div className="space-y-4 fade-in-blur">
-        {dailyData.map((data, index) => (
-          <div key={index} className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="font-medium text-gray-700">{data.hour}</span>
-              <div className="flex gap-4">
-                <span className="text-green-600">Entries: {data.entries}</span>
-                <span className="text-red-600">Exits: {data.exits}</span>
-              </div>
-            </div>
-            <div className="flex gap-1 h-4">
-              <div
-                className="bg-green-500 rounded-l"
-                style={{ width: `${(data.entries / maxValue) * 100}%` }}
-              ></div>
-              <div
-                className="bg-red-500 rounded-r"
-                style={{ width: `${(data.exits / maxValue) * 100}%` }}
-              ></div>
-            </div>
-          </div>
-        ))}
-        {dailyData.length === 0 && (
-          <p className="text-gray-500 text-center">No activity data for today</p>
-        )}
-      </div>
-    );
-  };
-
-  const AttendanceFlowChart: React.FC<{ dayStats: DayStats }> = ({ dayStats }) => {
-    const flowData = [
-      { label: 'Total Entries', value: dayStats.entries, color: 'bg-green-500' },
-      { label: 'Total Exits', value: dayStats.exits, color: 'bg-red-500' },
-      { label: 'Building Entries', value: dayStats.building_entries, color: 'bg-blue-500' },
-      { label: 'Session Entries', value: dayStats.session_entries, color: 'bg-purple-500' },
-    ];
-
-    const maxValue = Math.max(...flowData.map(d => d.value), 1);
-
-    return (
-      <div className="space-y-3 fade-in-blur">
-        {flowData.map((item, index) => (
-          <div key={index} className="space-y-1">
-            <div className="flex justify-between text-sm">
-              <span className="font-medium text-gray-700">{item.label}</span>
-              <span className="text-gray-500">{item.value}</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-3">
-              <div
-                className={`${item.color} h-3 rounded-full`}
-                style={{ width: `${(item.value / maxValue) * 100}%` }}
-              ></div>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
+};
   const SessionPopularityChart: React.FC<{ selectedDay: number }> = ({ selectedDay }) => {
     const [sessionData, setSessionData] = useState<Array<{ name: string; attendees: number; capacity: number; popularity: number }>>([]);
 
@@ -3274,88 +3145,71 @@ const handleEventSubmit = async () => {
         {/* Tab Content with Smooth Transitions */}
         <div className={getTabContentAnimation()}>
           {/* Dashboard Tab - Responsive */}
-          {activeTab === "dashboard" && (
-            <div className="space-y-6 sm:space-y-8 fade-in-blur">
-              {/* Quick Actions */}
-              <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 text-center fade-in-blur card-hover dashboard-card">
-                <h1 className="text-xl sm:text-3xl font-bold text-black-800 flex items-center justify-center gap-2 mb-4 sm:mb-6">
-                  <Sparkles className="h-5 w-5 sm:h-7 sm:w-7 text-orange-500" />
-                  Quick Actions
-                </h1>
+{activeTab === "dashboard" && (
+  <div className="space-y-6 sm:space-y-8 fade-in-blur">
+    {/* Quick Actions */}
+    <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 text-center fade-in-blur card-hover">
+      <h1 className="text-3xl font-bold text-black-800 flex items-center justify-center gap-2 mb-6">
+        <Sparkles className="h-7 w-7 text-orange-500" />
+        Quick Actions
+      </h1>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 stagger-children">
-                  <button
-                    onClick={() => setCompanyModal(true)}
-                    className="flex flex-col items-center justify-center py-4 sm:py-6 px-3 sm:px-4 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-all duration-300 smooth-hover"
-                  >
-                    <Building className="h-6 w-6 sm:h-8 sm:w-8 mb-2" />
-                    <span className="text-sm sm:text-base font-medium">Add Company</span>
-                  </button>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 stagger-children">
+        <button
+          onClick={() => setCompanyModal(true)}
+          className="flex flex-col items-center justify-center py-6 px-4 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-all duration-300 smooth-hover"
+        >
+          <Building className="h-8 w-8 mb-2" />
+          <span className="text-base font-medium">Add Company</span>
+        </button>
 
-                  <button
-                    onClick={() => setSessionModal(true)}
-                    className="flex flex-col items-center justify-center py-4 sm:py-6 px-3 sm:px-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-all duration-300 smooth-hover"
-                  >
-                    <Calendar className="h-6 w-6 sm:h-8 sm:w-8 mb-2" />
-                    <span className="text-sm sm:text-base font-medium">Add Session</span>
-                  </button>
+        <button
+          onClick={() => setSessionModal(true)}
+          className="flex flex-col items-center justify-center py-6 px-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-all duration-300 smooth-hover"
+        >
+          <Calendar className="h-8 w-8 mb-2" />
+          <span className="text-base font-medium">Add Session</span>
+        </button>
 
-                  <button
-                    onClick={() => setAnnouncementModal(true)}
-                    className="flex flex-col items-center justify-center py-4 sm:py-6 px-3 sm:px-4 bg-purple-500 text-white rounded-xl hover:bg-purple-700 transition-all duration-300 smooth-hover"
-                  >
-                    <Megaphone className="h-6 w-6 sm:h-8 sm:w-8 mb-2" />
-                    <span className="text-sm sm:text-base font-medium">Send Announcement</span>
-                  </button>
-                </div>
-              </div>
+        <button
+          onClick={() => setAnnouncementModal(true)}
+          className="flex flex-col items-center justify-center py-6 px-4 bg-purple-500 text-white rounded-xl hover:bg-purple-700 transition-all duration-300 smooth-hover"
+        >
+          <Megaphone className="h-8 w-8 mb-2" />
+          <span className="text-base font-medium">Send Announcement</span>
+        </button>
+      </div>
+    </div>
 
-              {/* Stats Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 stagger-children">
-                <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Total Users</p>
-                      <p className="text-2xl sm:text-3xl font-bold text-orange-600">
-                        {stats?.total_users || 0}
-                      </p>
-                    </div>
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                      <Users className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600" />
-                    </div>
-                  </div>
-                </div>
+    {/* Current State Widget - MOVED TO DASHBOARD */}
+    <CurrentStateWidget />
 
-                <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Total Attendees</p>
-                      <p className="text-2xl sm:text-3xl font-bold text-blue-600">
-                        {buildingStats?.total_attendees || 0}
-                      </p>
-                    </div>
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <Users className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
-                    </div>
-                  </div>
-                </div>
+    {/* Stats Cards */}
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 stagger-children">
+      <StatCard
+        title="Total Users"
+        value={stats?.total_users || 0}
+        icon={<Users className="h-6 w-6" />}
+        color="blue"
+      />
+      <StatCard
+        title="Total Attendees"
+        value={buildingStats?.total_attendees || 0}
+        icon={<Users className="h-6 w-6" />}
+        color="green"
+      />
+      <StatCard
+        title="Total Volunteers"
+        value={(stats?.total_users || 0) - (buildingStats?.total_attendees || 0)}
+        icon={<Users className="h-6 w-6" />}
+        color="purple"
+      />
+    </div>
 
-                <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover dashboard-card">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Total Volunteers</p>
-                      <p className="text-2xl sm:text-3xl font-bold text-green-600">
-                        {(stats?.total_users || 0) - (buildingStats?.total_attendees || 0)}
-                      </p>
-                    </div>
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                      <Users className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+    {/* Today's Event Entries */}
+    <TodayEventEntries />
+  </div>
+)}
 
           {/* Statistics Tab */}
           {activeTab === "statistics" && (
@@ -3596,7 +3450,7 @@ const handleEventSubmit = async () => {
                   onLoad={handleMapLoad}
                   onError={(e) => {
                     handleMapError();
-                    (e.currentTarget as HTMLImageElement).src = "/src/Assets/placeholder-map.png";
+                    (e.currentTarget as HTMLImageElement).src = "/src/Assets/placeholder-map.jpg";
                   }}
                 />
               </div>

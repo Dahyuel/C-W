@@ -14,6 +14,11 @@ import {
   AlertCircle,
   XCircle,
   X,
+  Trash2,
+  List,
+  DoorOpen,
+  DoorClosed,
+  ExternalLink,
 } from "lucide-react";
 import DashboardLayout from "../../components/shared/DashboardLayout";
 import { QRScanner } from "../../components/shared/QRScanner";
@@ -25,6 +30,8 @@ interface Session {
   title: string;
   description: string;
   speaker: string;
+  speaker_photo_url?: string;
+  speaker_linkedin_url?: string;
   start_time: string;
   end_time: string;
   location: string;
@@ -32,6 +39,7 @@ interface Session {
   max_attendees: number;
   current_bookings: number;
   session_type: string;
+  capacity?: number;
 }
 
 interface Attendee {
@@ -56,6 +64,12 @@ interface SessionBookingInfo {
   bookedAt?: string;
 }
 
+interface SessionAttendee extends Attendee {
+  booking_id: string;
+  booked_at: string;
+  is_inside_session: boolean;
+}
+
 export const InfoDeskDashboard: React.FC = () => {
   const { profile } = useAuth();
 
@@ -72,6 +86,10 @@ export const InfoDeskDashboard: React.FC = () => {
   const [searchResults, setSearchResults] = useState<Attendee[]>([]);
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [showAttendeesList, setShowAttendeesList] = useState(false);
+  const [sessionAttendees, setSessionAttendees] = useState<SessionAttendee[]>([]);
+  const [selectedAttendeeForRemoval, setSelectedAttendeeForRemoval] = useState<SessionAttendee | null>(null);
+  const [loadingAttendees, setLoadingAttendees] = useState(false);
 
   // Load sessions from database
   useEffect(() => {
@@ -120,26 +138,156 @@ export const InfoDeskDashboard: React.FC = () => {
     }
   };
 
-  const loadSessions = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await getAllSessions();
+const loadSessions = async () => {
+  try {
+    setLoading(true);
+    
+    // Get today's date at midnight (start of day)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Get all sessions starting from today
+    const { data, error } = await supabase
+      .from('sessions')
+      .select('*')
+      .gte('start_time', today.toISOString())
+      .order('start_time', { ascending: true });
+
+    if (error) {
+      setError("Failed to load sessions");
+      console.error("Error loading sessions:", error);
+      return;
+    }
+
+    // Filter out sessions on October 22nd and 23rd on the client side
+    const filteredSessions = (data || []).filter(session => {
+      const sessionDate = new Date(session.start_time);
+      const day = sessionDate.getDate();
+      const month = sessionDate.getMonth() + 1; // Months are 0-indexed
+      const year = sessionDate.getFullYear();
       
-      if (error) {
-        setError("Failed to load sessions");
-        console.error("Error loading sessions:", error);
-        return;
+      // Exclude October 22nd and 23rd, 2025
+      return !(year === 2025 && month === 10 && (day === 22 || day === 23));
+    });
+
+    setSessions(filteredSessions);
+  } catch (err) {
+    setError("Failed to load sessions");
+    console.error("Exception loading sessions:", err);
+  } finally {
+    setLoading(false);
+  }
+};
+  // Check if attendee is inside the session
+  const checkAttendeeSessionEntry = async (userId: string, sessionId: string): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase
+        .from('attendances')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('session_id', sessionId)
+        .eq('scan_type', 'session_entry')
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error checking session entry:', error);
+        return false;
       }
 
-      setSessions(data);
+      return !!data;
     } catch (err) {
-      setError("Failed to load sessions");
-      console.error("Exception loading sessions:", err);
-    } finally {
-      setLoading(false);
+      console.error('Exception checking session entry:', err);
+      return false;
     }
   };
 
+  // Load session attendees - FIXED QUERY with explicit relationship
+// Load session attendees - OPTIMIZED QUERY
+const loadSessionAttendees = async (sessionId: string) => {
+  try {
+    setLoadingAttendees(true);
+    console.log('Loading attendees for session:', sessionId);
+
+    // First, get all bookings for this session with explicit relationship
+    const { data: bookingsData, error: bookingsError } = await supabase
+      .from('attendances')
+      .select(`
+        id,
+        user_id,
+        scanned_at,
+        users_profiles!attendances_user_id_fkey (
+          id,
+          first_name,
+          last_name,
+          email,
+          personal_id,
+          university,
+          faculty
+        )
+      `)
+      .eq('session_id', sessionId)
+      .eq('scan_type', 'booking');
+
+    if (bookingsError) {
+      console.error('Error loading session bookings:', bookingsError);
+      setSessionAttendees([]);
+      return;
+    }
+
+    console.log('Found bookings:', bookingsData);
+
+    if (!bookingsData || bookingsData.length === 0) {
+      setSessionAttendees([]);
+      return;
+    }
+
+    // OPTIMIZATION: Get all session entries in a single query instead of individual checks
+    const userIds = bookingsData.map(attendance => attendance.user_id).filter(Boolean);
+    
+    let sessionEntries: { user_id: string }[] = [];
+    if (userIds.length > 0) {
+      const { data: entriesData } = await supabase
+        .from('attendances')
+        .select('user_id')
+        .eq('session_id', sessionId)
+        .eq('scan_type', 'session_entry')
+        .in('user_id', userIds);
+
+      sessionEntries = entriesData || [];
+    }
+
+    // Create a Set for faster lookup
+    const sessionEntryUserIds = new Set(sessionEntries.map(entry => entry.user_id));
+
+    // Process attendees with optimized session entry check
+    const attendeesWithStatus: SessionAttendee[] = bookingsData
+      .map((attendance) => {
+        if (!attendance.users_profiles) {
+          console.log('No user profile found for attendance:', attendance.id);
+          return null;
+        }
+
+        const isInsideSession = sessionEntryUserIds.has(attendance.user_id);
+        
+        return {
+          ...attendance.users_profiles,
+          booking_id: attendance.id,
+          booked_at: attendance.scanned_at,
+          is_inside_session: isInsideSession
+        };
+      })
+      .filter(attendee => attendee !== null) as SessionAttendee[];
+
+    console.log('Final attendees with status:', attendeesWithStatus);
+    setSessionAttendees(attendeesWithStatus);
+    
+  } catch (err) {
+    console.error('Exception loading session attendees:', err);
+    setSessionAttendees([]);
+  } finally {
+    setLoadingAttendees(false);
+  }
+};
   // Format time for display
   const formatTime = (timeString: string) => {
     if (!timeString) return '';
@@ -160,6 +308,14 @@ export const InfoDeskDashboard: React.FC = () => {
       day: 'numeric',
       year: 'numeric'
     });
+  };
+
+  const isSessionAtCapacity = (session: Session): boolean => {
+    // Use capacity field since it matches max_attendees
+    if (!session.capacity || session.capacity <= 0) {
+      return false; // No capacity limit
+    }
+    return session.current_bookings >= session.capacity;
   };
 
   // Check if attendee has booked the session
@@ -295,9 +451,15 @@ export const InfoDeskDashboard: React.FC = () => {
       setActionLoading(true);
       setError(null);
 
-      // Check capacity first
-      if (selectedSession.max_attendees && selectedSession.current_bookings >= selectedSession.max_attendees) {
+      // Check capacity first using capacity field
+      if (isSessionAtCapacity(selectedSession)) {
         setError("Session is at full capacity");
+        return;
+      }
+
+      // Check if attendee is inside event
+      if (!selectedAttendee.event_entry) {
+        setError("Attendee must be inside the event to book sessions");
         return;
       }
 
@@ -330,7 +492,7 @@ export const InfoDeskDashboard: React.FC = () => {
       });
 
       // Refresh session data to update booking count
-      loadSessions();
+      await loadSessions();
       
     } catch (err) {
       console.error('Add to session error:', err);
@@ -362,11 +524,42 @@ export const InfoDeskDashboard: React.FC = () => {
       setSessionBookingInfo({ isBooked: false });
 
       // Refresh session data to update booking count
-      loadSessions();
+      await loadSessions();
       
     } catch (err) {
       console.error('Remove from session error:', err);
       setError("Failed to remove attendee from session");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Remove attendee booking from session attendees list
+  const removeAttendeeBooking = async (attendee: SessionAttendee) => {
+    try {
+      setActionLoading(true);
+      setError(null);
+
+      const { error } = await supabase
+        .from('attendances')
+        .delete()
+        .eq('id', attendee.booking_id);
+
+      if (error) {
+        setError("Failed to remove attendee booking");
+        return;
+      }
+
+      // Refresh session data and attendees list
+      await loadSessions();
+      await loadSessionAttendees(selectedSession!.id);
+      
+      // Close the modal
+      setSelectedAttendeeForRemoval(null);
+      
+    } catch (err) {
+      console.error('Remove attendee booking error:', err);
+      setError("Failed to remove attendee booking");
     } finally {
       setActionLoading(false);
     }
@@ -379,6 +572,23 @@ export const InfoDeskDashboard: React.FC = () => {
     setSearchMode(null);
     setSearchId("");
     setError(null);
+    setShowAttendeesList(false);
+    setSessionAttendees([]);
+    setSelectedAttendeeForRemoval(null);
+    setSelectedSession(null); // Reset selected session
+  };
+
+  // Close attendees list modal and go back to main dashboard - FIXED
+  const closeAttendeesList = () => {
+    setShowAttendeesList(false);
+    setSessionAttendees([]);
+    setSelectedAttendeeForRemoval(null);
+    setSelectedSession(null); // Reset selected session to show session list
+  };
+
+  // Get capacity display text
+  const getCapacityDisplay = (session: Session) => {
+    return `${session.current_bookings || 0}/${session.capacity || 'Unlimited'}`;
   };
 
   if (loading) {
@@ -417,8 +627,8 @@ export const InfoDeskDashboard: React.FC = () => {
         )}
 
         {/* Session List */}
-        {!selectedSession && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {!selectedSession && !showAttendeesList && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {sessions.length === 0 ? (
               <div className="col-span-full text-center py-12">
                 <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -426,13 +636,13 @@ export const InfoDeskDashboard: React.FC = () => {
                 <p className="text-gray-500">There are no sessions available at the moment.</p>
               </div>
             ) : (
-              sessions.map((session) => (
+              sessions.map((session, index) => (
                 <div
                   key={session.id}
-                  className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 hover:shadow-md transition-shadow"
+                  className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 hover:shadow-md transition-all duration-300 transform hover:scale-105"
                 >
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-lg font-semibold text-gray-900 line-clamp-2">
+                  <div className="flex items-start justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-900 line-clamp-2 flex-1 pr-2">
                       {session.title}
                     </h3>
                     <Calendar className="h-5 w-5 text-orange-500 flex-shrink-0" />
@@ -442,14 +652,41 @@ export const InfoDeskDashboard: React.FC = () => {
                     {session.description}
                   </p>
                   
+                  {/* Speaker Information */}
+                  {session.speaker && (
+                    <div className="flex items-center mb-3">
+                      {session.speaker_photo_url ? (
+                        <img 
+                          src={session.speaker_photo_url} 
+                          alt={`${session.speaker} photo`}
+                          className="h-10 w-10 rounded-full object-cover mr-3"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = "https://via.placeholder.com/40x40/gray/white?text=Photo";
+                          }}
+                        />
+                      ) : (
+                        <User className="h-4 w-4 text-gray-400 mr-2" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 line-clamp-1">
+                          {session.speaker}
+                        </p>
+                        {session.speaker_linkedin_url && (
+                          <a 
+                            href={session.speaker_linkedin_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 text-xs flex items-center"
+                          >
+                            <ExternalLink className="h-3 w-3 mr-1" />
+                            LinkedIn
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
                   <div className="space-y-2 mb-4">
-                    {session.speaker && (
-                      <p className="text-sm text-gray-700">
-                        <User className="inline-block h-4 w-4 mr-1" />
-                        {session.speaker}
-                      </p>
-                    )}
-                    
                     <p className="text-sm text-gray-700">
                       <Clock className="inline-block h-4 w-4 mr-1" />
                       {formatDate(session.start_time)} • {formatTime(session.start_time)} - {formatTime(session.end_time)}
@@ -464,21 +701,42 @@ export const InfoDeskDashboard: React.FC = () => {
                     
                     <p className="text-sm font-medium text-gray-700">
                       <Users className="inline-block h-4 w-4 mr-1" />
-                      {session.current_bookings || 0}
-                      {session.max_attendees ? `/${session.max_attendees}` : ''} bookings
+                      {getCapacityDisplay(session)} bookings
                     </p>
                   </div>
 
-                  <button
-                    onClick={() => {
-                      setSelectedSession(session);
-                      setShowBookingManager(true);
-                    }}
-                    className="w-full flex items-center justify-center p-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
-                  >
-                    <Edit className="h-4 w-4 mr-2" />
-                    Manage Bookings
-                  </button>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => {
+                        if (isSessionAtCapacity(session)) {
+                          setError(`Session "${session.title}" is at full capacity (${getCapacityDisplay(session)})`);
+                          return;
+                        }
+                        setSelectedSession(session);
+                        setShowBookingManager(true);
+                      }}
+                      disabled={isSessionAtCapacity(session)}
+                      className={`flex-1 flex items-center justify-center p-3 rounded-lg transition-colors ${
+                        isSessionAtCapacity(session)
+                          ? 'bg-red-500 text-white cursor-not-allowed'
+                          : 'bg-orange-500 text-white hover:bg-orange-600'
+                      }`}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      {isSessionAtCapacity(session) ? 'Session Full' : 'Manage Bookings'}
+                    </button>
+                    
+<button
+  onClick={async () => {
+    setSelectedSession(session);
+    setShowAttendeesList(true); // Show modal immediately
+    await loadSessionAttendees(session.id); // Load data in background
+  }}
+  className="flex items-center justify-center p-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+>
+  <List className="h-4 w-4" />
+</button>
+                  </div>
                 </div>
               ))
             )}
@@ -486,8 +744,8 @@ export const InfoDeskDashboard: React.FC = () => {
         )}
 
         {/* Session Selected - Booking Manager */}
-        {selectedSession && showBookingManager && !selectedAttendee && (
-          <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 space-y-6">
+        {selectedSession && showBookingManager && !selectedAttendee && !showAttendeesList && (
+          <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 space-y-6">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">
@@ -508,19 +766,19 @@ export const InfoDeskDashboard: React.FC = () => {
             </div>
 
             {/* Mode Switch */}
-            <div className="flex space-x-4">
+            <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
               <button
                 onClick={() => {
                   setSearchMode("manual");
                   setSearchId("");
                 }}
-                className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                className={`px-4 sm:px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center ${
                   searchMode === "manual"
                     ? "bg-orange-500 text-white shadow-md"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
-                <Search className="h-4 w-4 inline mr-2" />
+                <Search className="h-4 w-4 mr-2" />
                 Search by Personal ID
               </button>
               <button
@@ -528,13 +786,13 @@ export const InfoDeskDashboard: React.FC = () => {
                   setSearchMode("qr");
                   setSearchId("");
                 }}
-                className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                className={`px-4 sm:px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center ${
                   searchMode === "qr"
                     ? "bg-orange-500 text-white shadow-md"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
-                <QrCode className="h-4 w-4 inline mr-2" />
+                <QrCode className="h-4 w-4 mr-2" />
                 QR Scanner
               </button>
             </div>
@@ -546,7 +804,7 @@ export const InfoDeskDashboard: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Search Attendees by Personal ID
                   </label>
-                  <div className="flex items-center space-x-3 relative">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-3 relative">
                     <div className="flex-1 relative">
                       <input
                         type="text"
@@ -555,7 +813,6 @@ export const InfoDeskDashboard: React.FC = () => {
                         onChange={(e) => setSearchId(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleManualSearch()}
                         onBlur={() => {
-                          // Delay hiding to allow clicks on search results
                           setTimeout(() => {
                             setSearchResults([]);
                           }, 200);
@@ -649,14 +906,14 @@ export const InfoDeskDashboard: React.FC = () => {
                     <button
                       onClick={handleManualSearch}
                       disabled={actionLoading || !searchId.trim()}
-                      className="px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+                      className="px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
                     >
                       {actionLoading ? (
                         <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                       ) : (
                         <>
                           <Search className="h-5 w-5" />
-                          <span>Search</span>
+                          <span className="hidden sm:inline">Search</span>
                         </>
                       )}
                     </button>
@@ -688,8 +945,8 @@ export const InfoDeskDashboard: React.FC = () => {
         )}
 
         {/* Attendee Details with Session Booking Actions */}
-        {selectedSession && selectedAttendee && (
-          <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 space-y-6">
+        {selectedSession && selectedAttendee && !showAttendeesList && (
+          <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 space-y-6">
             {/* Header */}
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-gray-900">Attendee Details</h2>
@@ -766,9 +1023,11 @@ export const InfoDeskDashboard: React.FC = () => {
               <p className="text-xs text-gray-500 mt-1">
                 {formatDate(selectedSession.start_time)} • {formatTime(selectedSession.start_time)} - {formatTime(selectedSession.end_time)}
               </p>
-              <p className="text-xs text-gray-500">
-                Bookings: {selectedSession.current_bookings || 0}
-                {selectedSession.max_attendees ? `/${selectedSession.max_attendees}` : ''}
+              <p className={`text-xs font-medium ${
+                isSessionAtCapacity(selectedSession) ? 'text-red-600' : 'text-gray-500'
+              }`}>
+                Bookings: {getCapacityDisplay(selectedSession)}
+                {isSessionAtCapacity(selectedSession) && ' (FULL)'}
               </p>
             </div>
 
@@ -787,19 +1046,19 @@ export const InfoDeskDashboard: React.FC = () => {
               )}
 
               {/* Capacity Check */}
-              {selectedSession.max_attendees && selectedSession.current_bookings >= selectedSession.max_attendees && !sessionBookingInfo.isBooked && (
+              {isSessionAtCapacity(selectedSession) && !sessionBookingInfo.isBooked && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <div className="flex items-center">
                     <XCircle className="h-5 w-5 text-red-500 mr-2" />
                     <span className="text-red-800 text-sm">
-                      Session is at full capacity
+                      Session is at full capacity ({getCapacityDisplay(selectedSession)})
                     </span>
                   </div>
                 </div>
               )}
 
               {/* Action Buttons */}
-              <div className="flex space-x-4">
+              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
                 {sessionBookingInfo.isBooked ? (
                   <button
                     onClick={removeFromSession}
@@ -821,7 +1080,7 @@ export const InfoDeskDashboard: React.FC = () => {
                     disabled={
                       actionLoading || 
                       !selectedAttendee.event_entry || 
-                      ((typeof selectedSession.max_attendees === 'number' && selectedSession.max_attendees > 0) && (selectedSession.current_bookings >= selectedSession.max_attendees))
+                      isSessionAtCapacity(selectedSession)
                     }
                     className="flex-1 flex items-center justify-center p-3 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                   >
@@ -835,6 +1094,186 @@ export const InfoDeskDashboard: React.FC = () => {
                     )}
                   </button>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+      {/* Remove Attendees Modal with Loading State */}
+{showAttendeesList && selectedSession && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div className="p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">
+              Session Attendees - {selectedSession.title}
+            </h2>
+            <p className="text-gray-600 mt-1">
+              {getCapacityDisplay(selectedSession)} booked
+            </p>
+          </div>
+          <button
+            onClick={closeAttendeesList}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <X className="h-6 w-6" />
+          </button>
+        </div>
+
+        {loadingAttendees ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mb-4"></div>
+            <p className="text-gray-600">Loading attendees...</p>
+            <p className="text-gray-400 text-sm mt-2">This may take a moment for large sessions</p>
+          </div>
+        ) : sessionAttendees.length > 0 ? (
+          <div className="space-y-3">
+            <div className="flex justify-between items-center mb-4">
+              <p className="text-sm text-gray-600">
+                Showing {sessionAttendees.length} attendees
+              </p>
+              <div className="flex space-x-2">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  <DoorOpen className="h-3 w-3 mr-1" />
+                  {sessionAttendees.filter(a => a.is_inside_session).length} Inside
+                </span>
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                  <DoorClosed className="h-3 w-3 mr-1" />
+                  {sessionAttendees.filter(a => !a.is_inside_session).length} Outside
+                </span>
+              </div>
+            </div>
+            {sessionAttendees.map((attendee) => (
+              <div
+                key={attendee.booking_id}
+                className="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:bg-gray-100 transition-colors cursor-pointer"
+                onClick={() => setSelectedAttendeeForRemoval(attendee)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-3">
+                      <h3 className="font-medium text-gray-900">
+                        {attendee.first_name} {attendee.last_name}
+                      </h3>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        attendee.is_inside_session
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {attendee.is_inside_session ? (
+                          <>
+                            <DoorOpen className="h-3 w-3 mr-1" />
+                            Inside Session
+                          </>
+                        ) : (
+                          <>
+                            <DoorClosed className="h-3 w-3 mr-1" />
+                            Outside Session
+                          </>
+                        )}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1">
+                      ID: {attendee.personal_id} • {attendee.email}
+                    </p>
+                    {attendee.university && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {attendee.university}
+                        {attendee.faculty && ` - ${attendee.faculty}`}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-400 mt-1">
+                      Booked: {new Date(attendee.booked_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <Trash2 className="h-5 w-5 text-red-500 hover:text-red-700" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No Attendees Found</h3>
+            <p className="text-gray-500">No one has booked this session yet.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+)}
+
+        {/* Remove Attendee Confirmation Modal */}
+        {selectedAttendeeForRemoval && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-gray-900">Remove Attendee</h3>
+                  <button
+                    onClick={() => setSelectedAttendeeForRemoval(null)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-gray-900 mb-2">Attendee Details</h4>
+                    <p className="text-sm text-gray-700">
+                      {selectedAttendeeForRemoval.first_name} {selectedAttendeeForRemoval.last_name}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      ID: {selectedAttendeeForRemoval.personal_id}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Email: {selectedAttendeeForRemoval.email}
+                    </p>
+                    {selectedAttendeeForRemoval.university && (
+                      <p className="text-sm text-gray-600">
+                        {selectedAttendeeForRemoval.university}
+                        {selectedAttendeeForRemoval.faculty && ` - ${selectedAttendeeForRemoval.faculty}`}
+                      </p>
+                    )}
+                    <div className="mt-2">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        selectedAttendeeForRemoval.is_inside_session
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {selectedAttendeeForRemoval.is_inside_session ? 'Inside Session' : 'Outside Session'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                    <div className="flex items-center">
+                      <AlertCircle className="h-5 w-5 text-yellow-500 mr-2" />
+                      <span className="text-yellow-800 text-sm">
+                        This will remove the attendee from the session. This action cannot be undone.
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={() => removeAttendeeBooking(selectedAttendeeForRemoval)}
+                      disabled={actionLoading}
+                      className="flex-1 bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {actionLoading ? 'Removing...' : 'Remove Booking'}
+                    </button>
+                    <button
+                      onClick={() => setSelectedAttendeeForRemoval(null)}
+                      disabled={actionLoading}
+                      className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 disabled:bg-gray-200 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
