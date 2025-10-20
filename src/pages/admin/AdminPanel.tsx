@@ -213,12 +213,11 @@ export function AdminPanel() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [companies, setCompanies] = useState<CompanyItem[]>([]);
   const [activeDay, setActiveDay] = useState(1);
-  const [mapImages, setMapImages] = useState<string[]>([]);
+
   const [activeTab, setActiveTab] = useState("dashboard");
   const [companyModal, setCompanyModal] = useState(false);
   const [sessionModal, setSessionModal] = useState(false);
   const [eventModal, setEventModal] = useState(false);
-  const [mapModal, setMapModal] = useState(false);
   const [announcementModal, setAnnouncementModal] = useState(false);
   const [sessionDetailModal, setSessionDetailModal] = useState(false);
   const [companyDetailModal, setCompanyDetailModal] = useState(false);
@@ -236,7 +235,11 @@ export function AdminPanel() {
   const [selectedCompanyEdit, setSelectedCompanyEdit] = useState<CompanyItem | null>(null);
   const [eventDetailModal, setEventDetailModal] = useState(false);
   const [selectedEventDetail, setSelectedEventDetail] = useState<EventItem | null>(null);
-  
+  const [mapModal, setMapModal] = useState(false);
+  const [mapForm, setMapForm] = useState({
+    day: 1,
+    image: null as File | null
+  });
   // New state for academic faculties and vacancies type
   const [selectedAcademicFaculties, setSelectedAcademicFaculties] = useState<string[]>([]);
   const [selectedVacanciesTypes, setSelectedVacanciesTypes] = useState<string[]>([]);
@@ -461,10 +464,6 @@ const [newEvent, setNewEvent] = useState<{
   speakerLinkedIn: "" // Add this
 });
 
-  const [mapForm, setMapForm] = useState<{ day: number; image: File | null;}>({
-    day: 1,
-    image: null
-  });
 
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
@@ -2981,53 +2980,12 @@ const handleEventSubmit = async () => {
     setMapLoading(true);
   }, [activeDay]);
 
-  const initializeMapImages = () => {
-    const mapUrls = [];
-    for (let day = 1; day <= 5; day++) {
-      const { data: urlData } = supabase.storage
-        .from("Assets")
-        .getPublicUrl(`Maps/day${day}.png`);
-      mapUrls.push(urlData.publicUrl);
-    }
-    setMapImages(mapUrls);
-  };
+const [mapImages, setMapImages] = useState([
+  "https://lh3.googleusercontent.com/d/1fSh7pKhrgl_exOkwInzdP21CJuiM7kHE", // Day 1
+  "https://lh3.googleusercontent.com/d/1D0ppvGqAtDI-YjtK7n54M29qCbtAsNMu"
+]);
 
-  useEffect(() => {
-    initializeMapImages();
-  }, []);
-
-  const handleMapUpload = async () => {
-    if (!mapForm.image) {
-      showFeedback("Please select an image!", "error");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const filePath = `Maps/day${mapForm.day}.png`;
-      
-      const { data, error } = await supabase.storage
-        .from("Assets")
-        .upload(filePath, mapForm.image, {
-          upsert: true
-        });
-
-      if (error) {
-        console.error("Map upload error:", error);
-        showFeedback("Failed to upload map image", "error");
-      } else {
-        showFeedback(`Day ${mapForm.day} map updated successfully!`, "success");
-        initializeMapImages();
-        setMapModal(false);
-        setMapForm({ day: 1, image: null });
-      }
-    } catch (err) {
-      console.error("Map upload exception:", err);
-      showFeedback("Failed to update map", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
+// Remove the useEffect that calls initializeMapImages
 
   const tabItems = [
     { key: "dashboard", label: "Dashboard" },
@@ -3413,49 +3371,95 @@ const handleEventSubmit = async () => {
             </div>
           )}
 
-          {/* Maps Tab - Responsive */}
-          {activeTab === "maps" && (
-            <div className="fade-in-blur">
-              <div className="mb-4 sm:mb-6">
-                <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 fade-in-blur">Event Maps</h2>
-                
-                <div className="flex space-x-1 sm:space-x-2 mb-4 fade-in-blur overflow-x-auto pb-2">
-                  {[1, 2, 3, 4, 5].map((day) => (
-                    <button
-                      key={day}
-                      onClick={() => setActiveDay(day)}
-                      className={`px-2 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover flex-shrink-0 ${
-                        activeDay === day 
-                          ? "bg-orange-500 text-white" 
-                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                      }`}
-                    >
-                      Day {day}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="bg-white rounded-xl shadow-sm border p-3 sm:p-4 flex justify-center items-center min-h-[300px] sm:min-h-[400px] fade-in-blur card-hover">
-                {mapLoading && (
-                  <div className="flex flex-col items-center justify-center fade-in-blur">
-                    <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-b-2 border-orange-500 mb-2"></div>
-                    <p className="text-gray-500 text-xs sm:text-sm">Loading map...</p>
-                  </div>
-                )}
-                <img
-                  src={mapImages[activeDay - 1]}
-                  alt={`Day ${activeDay} Map`}
-                  className={`max-w-full h-auto rounded-lg transition-opacity duration-200 ${mapLoading ? 'opacity-0 absolute' : 'opacity-100'}`}
-                  onLoad={handleMapLoad}
-                  onError={(e) => {
-                    handleMapError();
-                    (e.currentTarget as HTMLImageElement).src = "/src/Assets/placeholder-map.jpg";
-                  }}
-                />
-              </div>
-            </div>
-          )}
+         {/* Maps Tab - Responsive */}
+{activeTab === "maps" && (
+  <div className="fade-in-blur">
+    <div className="mb-4 sm:mb-6">
+      <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 fade-in-blur">Event Maps</h2>
+      
+      <div className="flex space-x-1 sm:space-x-2 mb-4 fade-in-blur overflow-x-auto pb-2">
+        {[1, 2, 3, 4, 5].map((day) => (
+          <button
+            key={day}
+            onClick={() => setActiveDay(day)}
+            className={`px-2 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover flex-shrink-0 ${
+              activeDay === day 
+                ? "bg-orange-500 text-white shadow-lg scale-105" 
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200 hover:shadow-md"
+            }`}
+          >
+            Day {day}
+          </button>
+        ))}
+      </div>
+    </div>
+    
+    <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover">
+      <div className="text-center mb-4">
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          Day {activeDay} Map
+        </h3>
+        <p className="text-sm text-gray-600">
+          {getDateForDay(activeDay)}
+        </p>
+      </div>
+    {/* Map Image with Loading State */}
+<div className="flex justify-center mb-4">
+  <div className="relative bg-gray-50 rounded-lg border-2 border-dashed border-gray-200 p-4 max-w-2xl w-full">
+    {mapImages[activeDay - 1] ? (
+      <img
+        src={mapImages[activeDay - 1]}
+        alt={`Day ${activeDay} Event Map`}
+        className="max-w-full h-auto rounded-lg shadow-sm mx-auto transform transition-all duration-300 hover:scale-105 cursor-pointer"
+        onClick={() => window.open(mapImages[activeDay - 1], '_blank')}
+        onError={(e) => {
+          // Fallback if image fails to load
+          (e.target as HTMLImageElement).src = "https://via.placeholder.com/600x400?text=Map+Coming+Soon";
+          (e.target as HTMLImageElement).alt = `Day ${activeDay} Map - Coming Soon`;
+        }}
+        onLoad={handleMapLoad}
+      />
+    ) : (
+      <div className="text-center py-12">
+        <MapPin className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+        <p className="text-gray-500">Map for Day {activeDay} coming soon</p>
+        <button
+          onClick={() => setMapModal(true)}
+          className="mt-4 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+        >
+          Upload Map
+        </button>
+      </div>
+    )}
+    
+    {mapLoading && (
+      <div className="absolute inset-0 bg-white bg-opacity-80 flex items-center justify-center rounded-lg fade-in-blur">
+        <div className="flex flex-col items-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mb-2"></div>
+          <p className="text-sm text-gray-500">Loading map...</p>
+        </div>
+      </div>
+    )}
+  </div>
+</div>
+      {/* Map Information */}
+      <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+        <div className="flex items-start">
+          <MapPin className="h-5 w-5 text-blue-500 mr-3 mt-0.5 flex-shrink-0" />
+          <div>
+            <h4 className="text-blue-800 font-medium text-sm mb-1">Map Information</h4>
+            <ul className="text-blue-700 text-xs space-y-1">
+              <li>• Click on the map to view it in full size</li>
+              <li>• Different colors represent different zones and activities</li>
+              <li>• Locations marked include stages, company booths, and session rooms</li>
+              <li>• Refer to this map for navigation during the event</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
  {/* Companies Tab - Responsive */}
 {activeTab === "companies" && (

@@ -993,8 +993,8 @@ const AttendeeDashboard: React.FC = () => {
 
   // Day maps path
 const mapImages = [
-  "/maps/day1.jpg",
-  "/maps/day2.jpg"
+  "https://lh3.googleusercontent.com/d/1fSh7pKhrgl_exOkwInzdP21CJuiM7kHE", // Replace with actual file ID
+  "https://lh3.googleusercontent.com/d/1D0ppvGqAtDI-YjtK7n54M29qCbtAsNMu" // Replace with actual file ID
 ];
 
   const handleEmployerWebsiteClick = (url: string) => {
@@ -1631,44 +1631,143 @@ const mapImages = [
             </div>
           )}
 
-          {/* Maps */}
-          {activeTab === "maps" && (
-            <div className="tab-content-animate">
-              <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4">Event Maps</h2>
-              <div className="flex space-x-1 sm:space-x-2 mb-4 overflow-x-auto pb-2">
-                {[1, 2, 3, 4, 5].map((day) => (
-                  <button
-                    key={day}
-                    onClick={() => {
-                      setActiveDay(day);
-                      loadMapForDay(day);
-                    }}
-                    className={`px-3 py-2 rounded-lg text-xs sm:text-sm flex-shrink-0 ${
-                      activeDay === day ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-700"
-                    }`}
-                  >
-                    Day {day}
-                  </button>
-                ))}
+     {/* Maps */}
+{activeTab === "maps" && (
+  <div className="tab-content-animate">
+    <div className="flex flex-col space-y-4 sm:space-y-0 sm:flex-row sm:items-center justify-between mb-6">
+      <h2 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center">
+        <MapPin className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-orange-600" /> 
+        <span className="text-sm sm:text-lg">Event Maps</span>
+      </h2>
+      
+      {/* Day Selector */}
+      <div className="flex space-x-1 sm:space-x-2 mb-4 overflow-x-auto pb-2">
+        {[1, 2, 3, 4, 5].map((day) => (
+          <button
+            key={day}
+            onClick={() => setActiveDay(day)}
+            className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 flex-shrink-0 transform hover:scale-105 ${
+              activeDay === day 
+                ? "bg-orange-500 text-white shadow-lg scale-110" 
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200 hover:shadow-md"
+            }`}
+          >
+            Day {day}
+          </button>
+        ))}
+      </div>
+    </div>
+    
+    <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6">
+      <div className="text-center mb-4">
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          Day {activeDay} Map
+        </h3>
+        <p className="text-sm text-gray-600">
+          Click the image to view full size or download for reference
+        </p>
+      </div>
+      
+      {/* Map Image with Enhanced Loading State */}
+      <div className="flex justify-center mb-6">
+        <div className="relative bg-gray-50 rounded-lg border-2 border-dashed border-gray-200 p-4 max-w-2xl w-full min-h-[300px] flex items-center justify-center">
+          {mapImages[activeDay - 1] ? (
+            <>
+              {/* Loading skeleton */}
+              <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${
+                mapsLoaded.has(activeDay) ? 'opacity-0 pointer-events-none' : 'opacity-100'
+              }`}>
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+                  <p className="text-gray-500 text-sm">Loading map for Day {activeDay}...</p>
+                </div>
               </div>
-              <div className="bg-white rounded-xl shadow-sm border p-3 sm:p-4 flex justify-center">
-                {mapsLoaded.has(activeDay) ? (
-                  <img
-                    src={mapImages[activeDay - 1]}
-                    alt={`Day ${activeDay} Map`}
-                    className="max-w-full h-auto rounded-lg"
-                  />
-                ) : (
-                  <div className="flex items-center justify-center h-64 w-full">
-                    <div className="text-center">
-                      <MapPin className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                      <p className="text-gray-500">Click on a day to load the map</p>
-                    </div>
-                  </div>
-                )}
-              </div>
+              
+              {/* Map image */}
+              <img
+                src={mapImages[activeDay - 1]}
+                alt={`Day ${activeDay} Event Map`}
+                className={`max-w-full h-auto rounded-lg shadow-sm mx-auto cursor-pointer transform transition-all duration-300 hover:scale-105 ${
+                  mapsLoaded.has(activeDay) ? 'opacity-100' : 'opacity-0'
+                }`}
+                onClick={() => window.open(mapImages[activeDay - 1], '_blank')}
+                onLoad={() => loadMapForDay(activeDay)}
+                onError={(e) => {
+                  // Fallback if image fails to load
+                  (e.target as HTMLImageElement).src = "https://via.placeholder.com/600x400?text=Map+Coming+Soon";
+                  (e.target as HTMLImageElement).alt = `Day ${activeDay} Map - Coming Soon`;
+                  loadMapForDay(activeDay); // Mark as loaded even on error
+                }}
+              />
+            </>
+          ) : (
+            <div className="text-center py-12">
+              <MapPin className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500">Map for Day {activeDay} coming soon</p>
             </div>
           )}
+        </div>
+      </div>
+      
+      {/* Download Button */}
+      <div className="flex flex-col sm:flex-row gap-3 justify-center">
+        <button
+          onClick={() => {
+            if (mapImages[activeDay - 1]) {
+              // Create a temporary link to trigger download
+              const link = document.createElement('a');
+              link.href = mapImages[activeDay - 1];
+              link.download = `career-week-day-${activeDay}-map.jpg`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }
+          }}
+          disabled={!mapImages[activeDay - 1] || !mapsLoaded.has(activeDay)}
+          className="flex items-center justify-center space-x-2 bg-orange-500 text-white px-6 py-3 rounded-lg hover:bg-orange-600 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+        >
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span>
+            {!mapsLoaded.has(activeDay) ? 'Loading...' : `Download Day ${activeDay} Map`}
+          </span>
+        </button>
+        
+        <button
+          onClick={() => {
+            if (mapImages[activeDay - 1]) {
+              window.open(mapImages[activeDay - 1], '_blank');
+            }
+          }}
+          disabled={!mapImages[activeDay - 1] || !mapsLoaded.has(activeDay)}
+          className="flex items-center justify-center space-x-2 border border-orange-500 text-orange-500 px-6 py-3 rounded-lg hover:bg-orange-50 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+        >
+          <ExternalLink className="h-5 w-5" />
+          <span>
+            {!mapsLoaded.has(activeDay) ? 'Loading...' : 'View Full Size'}
+          </span>
+        </button>
+      </div>
+      
+      {/* Additional Information */}
+      <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+        <div className="flex items-start">
+          <MapPin className="h-5 w-5 text-blue-500 mr-3 mt-0.5 flex-shrink-0" />
+          <div>
+            <h4 className="text-blue-800 font-medium text-sm mb-1">Map Instructions</h4>
+            <ul className="text-blue-700 text-xs space-y-1">
+              <li>• Download the map for easy reference during the event</li>
+              <li>• Click "View Full Size" to see the map in detail</li>
+              <li>• Locations marked include stages, company booths, and session rooms</li>
+              <li>• Different colors represent different zones and activities</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
           {/* Companies */}
           {activeTab === "companies" && (
