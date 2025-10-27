@@ -949,7 +949,231 @@ export const processAttendance = async (personalId: string, action: 'enter' | 'e
   }
 };
 
+// Get all attendance entries for a specific day with pagination
+export const getAttendanceByDay = async (day: number, page: number = 0, pageSize: number = 1000) => {
+  try {
+    // Calculate the date for the specific day (Day 1 = Oct 19, 2025)
+    const eventStartDate = new Date('2025-10-19');
+    const targetDate = new Date(eventStartDate);
+    targetDate.setDate(eventStartDate.getDate() + (day - 1));
+    
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(targetDate);
+    endOfDay.setHours(23, 59, 59, 999);
 
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data, error, count } = await supabase
+      .from('attendances')
+      .select(`
+        *,
+        user:users_profiles!attendances_user_id_fkey(
+          id,
+          first_name,
+          last_name,
+          personal_id,
+          email,
+          faculty,
+          university,
+          gender,
+          degree_level,
+          program,
+          class,
+          nationality,
+          role
+        )
+      `, { count: 'exact' })
+      .gte('scanned_at', startOfDay.toISOString())
+      .lte('scanned_at', endOfDay.toISOString())
+      .order('scanned_at', { ascending: false })
+      .range(from, to);
+
+    if (error) {
+      console.error(`Error fetching day ${day} attendance:`, error);
+      return { data: [], error, count: 0 };
+    }
+
+    return { data: data || [], error: null, count: count || 0 };
+  } catch (error: any) {
+    console.error(`Exception fetching day ${day} attendance:`, error);
+    return { data: [], error: { message: error.message }, count: 0 };
+  }
+};
+
+// Get all unique users who attended on a specific day (for analytics)
+export const getUniqueAttendeesByDay = async (day: number) => {
+  try {
+    // Calculate the date for the specific day
+    const eventStartDate = new Date('2025-10-19');
+    const targetDate = new Date(eventStartDate);
+    targetDate.setDate(eventStartDate.getDate() + (day - 1));
+    
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(targetDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // Get all entry scans for the day
+    let allEntries: any[] = [];
+    let page = 0;
+    const pageSize = 1000;
+    let hasMore = true;
+
+    console.log(`🔄 Fetching all entry scans for Day ${day}...`);
+
+    while (hasMore) {
+      const from = page * pageSize;
+      const to = from + pageSize - 1;
+      
+      const { data: entries, error } = await supabase
+        .from('attendances')
+        .select(`
+          user_id,
+          scan_type,
+          scanned_at,
+          user:users_profiles!attendances_user_id_fkey(
+            id,
+            first_name,
+            last_name,
+            personal_id,
+            email,
+            faculty,
+            university,
+            gender,
+            degree_level,
+            program,
+            class,
+            nationality,
+            role
+          )
+        `)
+        .eq('scan_type', 'entry')
+        .gte('scanned_at', startOfDay.toISOString())
+        .lte('scanned_at', endOfDay.toISOString())
+        .range(from, to);
+
+      if (error) {
+        console.error(`Error fetching entries page ${page}:`, error);
+        break;
+      }
+
+      if (entries && entries.length > 0) {
+        allEntries = [...allEntries, ...entries];
+        page++;
+        
+        console.log(`📊 Fetched page ${page}: ${entries.length} entries (Total: ${allEntries.length})`);
+
+        if (entries.length < pageSize) {
+          hasMore = false;
+        }
+      } else {
+        hasMore = false;
+      }
+    }
+
+    // Get unique users (remove duplicates by user_id)
+    const uniqueUsers = allEntries.reduce((acc, entry) => {
+      if (entry.user_id && !acc.some(user => user.id === entry.user_id)) {
+        acc.push({
+          ...entry.user,
+          entry_time: entry.scanned_at
+        });
+      }
+      return acc;
+    }, []);
+
+    console.log(`✅ Found ${uniqueUsers.length} unique attendees for Day ${day}`);
+
+    return { data: uniqueUsers, error: null };
+  } catch (error: any) {
+    console.error(`Exception fetching unique attendees for Day ${day}:`, error);
+    return { data: [], error: { message: error.message } };
+  }
+};
+
+// Get daily activity breakdown by hour
+export const getDailyActivityByDay = async (day: number) => {
+  try {
+    const eventStartDate = new Date('2025-10-19');
+    const targetDate = new Date(eventStartDate);
+    targetDate.setDate(eventStartDate.getDate() + (day - 1));
+    
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(targetDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // Get all entries for the day
+    let allEntries: any[] = [];
+    let page = 0;
+    const pageSize = 1000;
+    let hasMore = true;
+
+    while (hasMore) {
+      const from = page * pageSize;
+      const to = from + pageSize - 1;
+      
+      const { data: entries, error } = await supabase
+        .from('attendances')
+        .select('scanned_at')
+        .eq('scan_type', 'entry')
+        .gte('scanned_at', startOfDay.toISOString())
+        .lte('scanned_at', endOfDay.toISOString())
+        .range(from, to);
+
+      if (error) {
+        console.error(`Error fetching activity page ${page}:`, error);
+        break;
+      }
+
+      if (entries && entries.length > 0) {
+        allEntries = [...allEntries, ...entries];
+        page++;
+
+        if (entries.length < pageSize) {
+          hasMore = false;
+        }
+      } else {
+        hasMore = false;
+      }
+    }
+
+    // Group by hour
+    const hourlyData: { [key: string]: number } = {};
+    
+    // Initialize all hours from 8:00 to 22:00
+    for (let hour = 8; hour <= 22; hour++) {
+      hourlyData[`${hour}:00`] = 0;
+    }
+
+    // Count entries per hour
+    allEntries.forEach(entry => {
+      const entryTime = new Date(entry.scanned_at);
+      const hour = entryTime.getHours();
+      const hourKey = `${hour}:00`;
+      
+      if (hourlyData[hourKey] !== undefined) {
+        hourlyData[hourKey]++;
+      }
+    });
+
+    // Convert to array format
+    const activityData = Object.entries(hourlyData).map(([hour, entries]) => ({
+      hour,
+      entries
+    }));
+
+    return { data: activityData, error: null };
+  } catch (error: any) {
+    console.error(`Exception fetching daily activity for Day ${day}:`, error);
+    return { data: [], error: { message: error.message } };
+  }
+};
 // Get attendee by personal ID (only attendees)
 export const getAttendeeByPersonalId = async (personalId: string) => {
   try {

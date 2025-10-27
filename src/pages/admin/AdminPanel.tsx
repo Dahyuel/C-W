@@ -132,10 +132,9 @@ interface EventItem {
   speaker_photo_url?: string; // Add this
   speaker_linkedin_url?: string; // Add this
 }
-// Update the StatisticsData interface
 interface StatisticsData {
   totalAttendees: number;
-  genderDistribution: { male: number; female: number; other: number };
+  genderDistribution: { male: number; female: number }; // Remove 'other'
   universityDistribution: Array<{ name: string; count: number; percentage: number }>;
   facultyDistribution: Array<{ name: string; count: number; percentage: number }>;
   degreeLevelDistribution: Array<{ name: string; count: number; percentage: number }>;
@@ -855,19 +854,20 @@ const fetchStatisticsData = async () => {
     const totalCompletedAttendees = allAttendees.length;
 
     // Gender distribution (filter out null/undefined)
-    const genderCount = allAttendees.reduce((acc, user) => {
-      const gender = user.gender;
-      if (gender && gender !== 'Not Specified') {
-        acc[gender] = (acc[gender] || 0) + 1;
-      }
-      return acc;
-    }, {} as Record<string, number>);
+ // Gender distribution (filter out null/undefined and only count male/female)
+const genderCount = allAttendees.reduce((acc, user) => {
+  const gender = user.gender;
+  if (gender === 'male' || gender === 'female') {
+    acc[gender] = (acc[gender] || 0) + 1;
+  }
+  return acc;
+}, {} as Record<string, number>);
 
-    const genderDistribution = {
-      male: genderCount.male || 0,
-      female: genderCount.female || 0,
-      other: genderCount.other || 0
-    };
+const genderDistribution = {
+  male: genderCount.male || 0,
+  female: genderCount.female || 0
+  // Remove 'other'
+};
 
     // Calculate distributions (filter out "Not Specified" and null/undefined)
     const universityDistribution = calculateDistributionFiltered(allAttendees, 'university');
@@ -1169,19 +1169,18 @@ const AttendanceFlowChart: React.FC<{ stats: {
         : [...prev, type]
     );
   };
-
-  // Helper function to get date for a specific day
-  const getDateForDay = (day: number): string => {
-    const eventStartDate = new Date('2025-10-19');
-    const targetDate = new Date(eventStartDate);
-    targetDate.setDate(eventStartDate.getDate() + (day - 1));
-    return targetDate.toLocaleDateString('en-US', { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
-  };
+// Helper function to get date for a specific day
+const getDateForDay = (day: number): string => {
+  const eventStartDate = new Date('2025-10-19');
+  const targetDate = new Date(eventStartDate);
+  targetDate.setDate(eventStartDate.getDate() + (day - 1));
+  return targetDate.toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+};
 
   // Helper function to get day from date (Day 1 = Oct 19, 2025)
   const getDayFromDate = (dateString: string): number => {
@@ -2188,48 +2187,43 @@ const StatisticsTab = () => {
     return (
       <div className="space-y-6">
         {/* Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard
-            title="Total Attendees"
-            value={statisticsData.totalAttendees}
-            icon={<Users className="h-6 w-6" />}
-            color="blue"
-          />
-          <StatCard
-            title="Male"
-            value={statisticsData.genderDistribution.male}
-            icon={<User className="h-6 w-6" />}
-            color="blue"
-          />
-          <StatCard
-            title="Female"
-            value={statisticsData.genderDistribution.female}
-            icon={<User className="h-6 w-6" />}
-            color="pink"
-          />
-          <StatCard
-            title="Other/Unspecified"
-            value={statisticsData.genderDistribution.other}
-            icon={<User className="h-6 w-6" />}
-            color="purple"
-          />
-        </div>
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"> {/* Changed from 4 to 3 columns */}
+  <StatCard
+    title="Total Attendees"
+    value={statisticsData.totalAttendees}
+    icon={<Users className="h-6 w-6" />}
+    color="blue"
+  />
+  <StatCard
+    title="Male"
+    value={statisticsData.genderDistribution.male}
+    icon={<User className="h-6 w-6" />}
+    color="blue"
+  />
+  <StatCard
+    title="Female"
+    value={statisticsData.genderDistribution.female}
+    icon={<User className="h-6 w-6" />}
+    color="pink"
+  />
+  {/* Remove the Other/Unspecified card */}
+</div>
 
       {/* Charts Grid */}
 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-  {/* Gender Distribution */}
-  {statisticsData.genderDistribution.male + statisticsData.genderDistribution.female + statisticsData.genderDistribution.other > 0 && (
-    <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Gender Distribution</h3>
-      <PieChart
-        data={[
-          { name: 'Male', value: statisticsData.genderDistribution.male, color: '#3b82f6' },
-          { name: 'Female', value: statisticsData.genderDistribution.female, color: '#ec4899' },
-          { name: 'Other', value: statisticsData.genderDistribution.other, color: '#8b5cf6' }
-        ]}
-      />
-    </div>
-  )}
+      {/* Gender Distribution */}
+      {statisticsData.genderDistribution.male + statisticsData.genderDistribution.female > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Gender Distribution</h3>
+          <PieChart
+            data={[
+              { name: 'Male', value: statisticsData.genderDistribution.male, color: '#3b82f6' },
+              { name: 'Female', value: statisticsData.genderDistribution.female, color: '#ec4899' }
+              // Remove the 'other' entry
+            ]}
+          />
+        </div>
+      )}
 
   {/* Class Distribution */}
   {statisticsData.classDistribution.length > 0 && (
@@ -2421,21 +2415,22 @@ const FilterView = () => {
             </select>
           </div>
 
-          {/* Gender Filter */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700">
-              👤 Gender
-            </label>
-            <select
-              value={filters.gender}
-              onChange={(e) => handleFilterChange('gender', e.target.value)}
-              className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 bg-white"
-            >
-              <option value="">All Genders</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-            </select>
-          </div>
+        {/* Gender Filter */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">
+            👤 Gender
+          </label>
+          <select
+            value={filters.gender}
+            onChange={(e) => handleFilterChange('gender', e.target.value)}
+            className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 bg-white"
+          >
+            <option value="">All Genders</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            {/* Remove the 'other' option */}
+          </select>
+        </div>
 
           {/* Degree Level Filter */}
           <div className="space-y-2">
@@ -3150,7 +3145,11 @@ const SimpleList = ({ data }: { data: Array<{ name: string; count: number; perce
     </div>
   );
 };
-const AttendanceTab  = () => {
+
+
+const AttendanceTab = () => {
+  const [selectedDay, setSelectedDay] = useState(1);
+  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<{
     day: number;
     date: string;
@@ -3176,40 +3175,494 @@ const AttendanceTab  = () => {
       count: number;
       percentage: number;
     }>;
+    faculty_stats: Array<{
+      name: string;
+      count: number;
+      percentage: number;
+    }>;
+    gender_stats: {
+      male: number;
+      female: number;
+      total: number;
+    };
+    daily_activity: Array<{
+      hour: string;
+      entries: number;
+    }>;
   } | null>(null);
-  
-  const [loading, setLoading] = useState(true);
-  const [selectedDay, setSelectedDay] = useState(1);
+
+  const [rawAttendees, setRawAttendees] = useState<any[]>([]);
 
   useEffect(() => {
-    fetchEventStats(selectedDay);
+    fetchDayStats(selectedDay);
   }, [selectedDay]);
 
-  const fetchEventStats = async (day: number) => {
+  // Function to get all attendance records for a day with pagination
+  const getAllAttendanceForDay = async (day: number) => {
+    try {
+      const eventStartDate = new Date('2025-10-19');
+      const targetDate = new Date(eventStartDate);
+      targetDate.setDate(eventStartDate.getDate() + (day - 1));
+      
+      const startOfDay = new Date(targetDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date(targetDate);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      let allAttendances: any[] = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
+
+      console.log(`🔄 Fetching all attendance records for Day ${day}...`);
+
+      while (hasMore) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+        
+        const { data: attendances, error } = await supabase
+          .from('attendances')
+          .select(`
+            *,
+            user:users_profiles!attendances_user_id_fkey(
+              id,
+              first_name,
+              last_name,
+              personal_id,
+              email,
+              faculty,
+              university,
+              gender,
+              degree_level,
+              program,
+              class,
+              nationality,
+              role
+            )
+          `)
+          .gte('scanned_at', startOfDay.toISOString())
+          .lte('scanned_at', endOfDay.toISOString())
+          .order('scanned_at', { ascending: false })
+          .range(from, to);
+
+        if (error) {
+          console.error(`Error fetching attendance page ${page}:`, error);
+          break;
+        }
+
+        if (attendances && attendances.length > 0) {
+          allAttendances = [...allAttendances, ...attendances];
+          page++;
+          
+          console.log(`📊 Fetched page ${page}: ${attendances.length} records (Total: ${allAttendances.length})`);
+
+          if (attendances.length < pageSize) {
+            hasMore = false;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+
+      console.log(`✅ Total attendance records for Day ${day}: ${allAttendances.length}`);
+      return { data: allAttendances, error: null };
+    } catch (error: any) {
+      console.error(`Exception fetching attendance for Day ${day}:`, error);
+      return { data: [], error: { message: error.message } };
+    }
+  };
+
+  // Function to get unique attendees for a day
+  const getUniqueAttendeesForDay = async (day: number) => {
+    try {
+      const eventStartDate = new Date('2025-10-19');
+      const targetDate = new Date(eventStartDate);
+      targetDate.setDate(eventStartDate.getDate() + (day - 1));
+      
+      const startOfDay = new Date(targetDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date(targetDate);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      // Get all entry scans for the day
+      let allEntries: any[] = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
+
+      console.log(`🔄 Fetching entry scans for Day ${day}...`);
+
+      while (hasMore) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+        
+        const { data: entries, error } = await supabase
+          .from('attendances')
+          .select(`
+            user_id,
+            scan_type,
+            scanned_at,
+            user:users_profiles!attendances_user_id_fkey(
+              id,
+              first_name,
+              last_name,
+              personal_id,
+              email,
+              faculty,
+              university,
+              gender,
+              degree_level,
+              program,
+              class,
+              nationality,
+              role
+            )
+          `)
+          .eq('scan_type', 'entry')
+          .gte('scanned_at', startOfDay.toISOString())
+          .lte('scanned_at', endOfDay.toISOString())
+          .range(from, to);
+
+        if (error) {
+          console.error(`Error fetching entries page ${page}:`, error);
+          break;
+        }
+
+        if (entries && entries.length > 0) {
+          allEntries = [...allEntries, ...entries];
+          page++;
+          
+          console.log(`📊 Fetched page ${page}: ${entries.length} entries (Total: ${allEntries.length})`);
+
+          if (entries.length < pageSize) {
+            hasMore = false;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+
+      // Get unique users (remove duplicates by user_id)
+      const uniqueUsers = allEntries.reduce((acc: any[], entry) => {
+        if (entry.user_id && entry.user && !acc.some((user: any) => user.id === entry.user_id)) {
+          acc.push({
+            ...entry.user,
+            entry_time: entry.scanned_at
+          });
+        }
+        return acc;
+      }, []);
+
+      console.log(`✅ Found ${uniqueUsers.length} unique attendees for Day ${day}`);
+      return { data: uniqueUsers, error: null };
+    } catch (error: any) {
+      console.error(`Exception fetching unique attendees for Day ${day}:`, error);
+      return { data: [], error: { message: error.message } };
+    }
+  };
+
+  // Function to get daily activity by hour
+  const getDailyActivityForDay = async (day: number) => {
+    try {
+      const eventStartDate = new Date('2025-10-19');
+      const targetDate = new Date(eventStartDate);
+      targetDate.setDate(eventStartDate.getDate() + (day - 1));
+      
+      const startOfDay = new Date(targetDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date(targetDate);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      // Get all entries for the day
+      let allEntries: any[] = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+        
+        const { data: entries, error } = await supabase
+          .from('attendances')
+          .select('scanned_at')
+          .eq('scan_type', 'entry')
+          .gte('scanned_at', startOfDay.toISOString())
+          .lte('scanned_at', endOfDay.toISOString())
+          .range(from, to);
+
+        if (error) {
+          console.error(`Error fetching activity page ${page}:`, error);
+          break;
+        }
+
+        if (entries && entries.length > 0) {
+          allEntries = [...allEntries, ...entries];
+          page++;
+
+          if (entries.length < pageSize) {
+            hasMore = false;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+
+      // Group by hour
+      const hourlyData: { [key: string]: number } = {};
+      
+      // Initialize all hours from 8:00 to 22:00
+      for (let hour = 8; hour <= 22; hour++) {
+        hourlyData[`${hour}:00`] = 0;
+      }
+
+      // Count entries per hour
+      allEntries.forEach(entry => {
+        const entryTime = new Date(entry.scanned_at);
+        const hour = entryTime.getHours();
+        const hourKey = `${hour}:00`;
+        
+        if (hourlyData[hourKey] !== undefined) {
+          hourlyData[hourKey]++;
+        }
+      });
+
+      // Convert to array format
+      const activityData = Object.entries(hourlyData).map(([hour, entries]) => ({
+        hour,
+        entries
+      }));
+
+      return { data: activityData, error: null };
+    } catch (error: any) {
+      console.error(`Exception fetching daily activity for Day ${day}:`, error);
+      return { data: [], error: { message: error.message } };
+    }
+  };
+
+  const fetchDayStats = async (day: number) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .rpc('get_event_stats', { selected_day: day });
+      console.log(`🔄 Fetching statistics for Day ${day}...`);
 
-      if (error) throw error;
-      setStats(data);
+      // Get unique attendees for the day
+      const { data: attendees, error: attendeesError } = await getUniqueAttendeesForDay(day);
+      
+      if (attendeesError) {
+        throw attendeesError;
+      }
+
+      setRawAttendees(attendees || []);
+
+      // Get daily activity
+      const { data: dailyActivity, error: activityError } = await getDailyActivityForDay(day);
+      
+      if (activityError) {
+        console.error('Error fetching daily activity:', activityError);
+      }
+
+      // Get all attendance records for the day to count different scan types
+      const { data: allAttendances, error: attendanceError } = await getAllAttendanceForDay(day);
+      
+      if (attendanceError) {
+        console.error('Error fetching all attendance:', attendanceError);
+      }
+
+      // Calculate statistics from the data
+      const attendanceStats = calculateAttendanceStats(allAttendances || []);
+      const currentState = await calculateCurrentState();
+      const degreeStats = calculateDegreeStats(attendees || []);
+      const universityStats = calculateUniversityStats(attendees || []);
+      const facultyStats = calculateFacultyStats(attendees || []);
+      const genderStats = calculateGenderStats(attendees || []);
+
+      const dayStats = {
+        day,
+        date: getDateForDay(day),
+        attendance_stats: attendanceStats,
+        current_state: currentState,
+        degree_stats: degreeStats,
+        university_stats: universityStats,
+        faculty_stats: facultyStats,
+        gender_stats: genderStats,
+        daily_activity: dailyActivity || []
+      };
+
+      setStats(dayStats);
+      console.log(`✅ Loaded statistics for Day ${day}:`, dayStats);
+
     } catch (error) {
-      console.error('Error fetching event stats:', error);
-      // Fallback to empty stats
+      console.error('Error fetching day stats:', error);
+      // Set fallback empty stats
       setStats({
         day,
-        date: new Date().toISOString().split('T')[0],
+        date: getDateForDay(day),
         attendance_stats: { entries: 0, exits: 0, building_entries: 0, session_entries: 0 },
         current_state: { current_in_event: 0, current_in_building: 0 },
         degree_stats: { students: 0, graduates: 0, total: 0, student_percentage: 0, graduate_percentage: 0 },
-        university_stats: []
+        university_stats: [],
+        faculty_stats: [],
+        gender_stats: { male: 0, female: 0, total: 0 },
+        daily_activity: []
       });
     } finally {
       setLoading(false);
     }
   };
 
-  // ... rest of your component JSX remains the same
+  // Helper function to calculate attendance statistics
+  const calculateAttendanceStats = (attendances: any[]) => {
+    const stats = {
+      entries: 0,
+      exits: 0,
+      building_entries: 0,
+      session_entries: 0
+    };
+
+    attendances.forEach(attendance => {
+      switch (attendance.scan_type) {
+        case 'entry':
+          stats.entries++;
+          break;
+        case 'exit':
+          stats.exits++;
+          break;
+        case 'building_entry':
+          stats.building_entries++;
+          break;
+        case 'session_entry':
+          stats.session_entries++;
+          break;
+      }
+    });
+
+    return stats;
+  };
+
+  // Helper function to calculate current state
+  const calculateCurrentState = async () => {
+    try {
+      const { count: currentInEvent } = await supabase
+        .from('users_profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('event_entry', true)
+        .eq('role', 'attendee');
+
+      const { count: currentInBuilding } = await supabase
+        .from('users_profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('building_entry', true)
+        .eq('role', 'attendee');
+
+      return {
+        current_in_event: currentInEvent || 0,
+        current_in_building: currentInBuilding || 0
+      };
+    } catch (error) {
+      console.error('Error calculating current state:', error);
+      return { current_in_event: 0, current_in_building: 0 };
+    }
+  };
+
+  // Helper function to calculate degree statistics
+  const calculateDegreeStats = (attendees: any[]) => {
+    const stats = {
+      students: 0,
+      graduates: 0,
+      total: attendees.length,
+      student_percentage: 0,
+      graduate_percentage: 0
+    };
+
+    attendees.forEach(attendee => {
+      if (attendee.degree_level === 'student') {
+        stats.students++;
+      } else if (attendee.degree_level === 'graduate') {
+        stats.graduates++;
+      }
+    });
+
+    if (stats.total > 0) {
+      stats.student_percentage = (stats.students / stats.total) * 100;
+      stats.graduate_percentage = (stats.graduates / stats.total) * 100;
+    }
+
+    return stats;
+  };
+
+  // Helper function to calculate university statistics
+  const calculateUniversityStats = (attendees: any[]) => {
+    const universityCount: Record<string, number> = {};
+
+    attendees.forEach(attendee => {
+      if (attendee.university && attendee.university !== 'Not Specified') {
+        universityCount[attendee.university] = (universityCount[attendee.university] || 0) + 1;
+      }
+    });
+
+    const total = attendees.length;
+    return Object.entries(universityCount)
+      .map(([name, count]) => ({
+        name,
+        count,
+        percentage: total > 0 ? (count / total) * 100 : 0
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10); // Top 10 universities
+  };
+
+  // Helper function to calculate faculty statistics
+  const calculateFacultyStats = (attendees: any[]) => {
+    const facultyCount: Record<string, number> = {};
+
+    attendees.forEach(attendee => {
+      if (attendee.faculty && attendee.faculty !== 'Not Specified') {
+        facultyCount[attendee.faculty] = (facultyCount[attendee.faculty] || 0) + 1;
+      }
+    });
+
+    const total = attendees.length;
+    return Object.entries(facultyCount)
+      .map(([name, count]) => ({
+        name,
+        count,
+        percentage: total > 0 ? (count / total) * 100 : 0
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10); // Top 10 faculties
+  };
+
+  // Helper function to calculate gender statistics
+  const calculateGenderStats = (attendees: any[]) => {
+    const stats = {
+      male: 0,
+      female: 0,
+      total: attendees.length
+    };
+
+    attendees.forEach(attendee => {
+      if (attendee.gender === 'male') {
+        stats.male++;
+      } else if (attendee.gender === 'female') {
+        stats.female++;
+      }
+    });
+
+    return stats;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
+        <p className="text-gray-600">Loading Day {selectedDay} statistics...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 sm:space-y-8 fade-in-blur">
       {/* Day Selector */}
@@ -3232,18 +3685,18 @@ const AttendanceTab  = () => {
       {/* Current Day Stats */}
       <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Day {stats?.day} - {getDateForDay(stats?.day || 1)}
+          Day {stats?.day} - {stats?.date}
         </h3>
         
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 stagger-children">
           <StatCard
-            title="Entries"
+            title="Event Entries"
             value={stats?.attendance_stats.entries || 0}
             icon={<TrendingUp className="h-5 w-5" />}
             color="green"
           />
           <StatCard
-            title="Exits"
+            title="Event Exits"
             value={stats?.attendance_stats.exits || 0}
             icon={<TrendingUp className="h-5 w-5" />}
             color="red"
@@ -3282,8 +3735,46 @@ const AttendanceTab  = () => {
         </div>
       </div>
 
+      {/* Gender Distribution */}
+      {stats?.gender_stats && stats.gender_stats.total > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Gender Distribution</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-gray-700">Male</span>
+                <span className="text-lg font-bold text-blue-600">
+                  {stats.gender_stats.male} ({((stats.gender_stats.male / stats.gender_stats.total) * 100).toFixed(1)}%)
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-4">
+                <div
+                  className="bg-blue-500 h-4 rounded-full"
+                  style={{ width: `${(stats.gender_stats.male / stats.gender_stats.total) * 100}%` }}
+                ></div>
+              </div>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-gray-700">Female</span>
+                <span className="text-lg font-bold text-pink-600">
+                  {stats.gender_stats.female} ({((stats.gender_stats.female / stats.gender_stats.total) * 100).toFixed(1)}%)
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-4">
+                <div
+                  className="bg-pink-500 h-4 rounded-full"
+                  style={{ width: `${(stats.gender_stats.female / stats.gender_stats.total) * 100}%` }}
+                ></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Student-Graduate Ratio */}
-      {stats?.degree_stats && (
+      {stats?.degree_stats && stats.degree_stats.total > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Student-Graduate Ratio</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -3291,7 +3782,7 @@ const AttendanceTab  = () => {
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-gray-700">Students</span>
                 <span className="text-lg font-bold text-green-600">
-                  {stats.degree_stats.students} ({stats.degree_stats.student_percentage}%)
+                  {stats.degree_stats.students} ({stats.degree_stats.student_percentage.toFixed(1)}%)
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-4">
@@ -3306,7 +3797,7 @@ const AttendanceTab  = () => {
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-gray-700">Graduates</span>
                 <span className="text-lg font-bold text-blue-600">
-                  {stats.degree_stats.graduates} ({stats.degree_stats.graduate_percentage}%)
+                  {stats.degree_stats.graduates} ({stats.degree_stats.graduate_percentage.toFixed(1)}%)
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-4">
@@ -3329,7 +3820,7 @@ const AttendanceTab  = () => {
       {/* University Distribution */}
       {stats?.university_stats && stats.university_stats.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Universities in Event</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Universities</h3>
           <div className="space-y-3">
             {stats.university_stats.map((university, index) => (
               <div key={index} className="space-y-1">
@@ -3338,13 +3829,40 @@ const AttendanceTab  = () => {
                     {university.name}
                   </span>
                   <span className="text-gray-500 whitespace-nowrap">
-                    {university.count} ({university.percentage}%)
+                    {university.count} ({university.percentage.toFixed(1)}%)
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-3">
                   <div
                     className="bg-purple-500 h-3 rounded-full"
                     style={{ width: `${university.percentage}%` }}
+                  ></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Faculty Distribution */}
+      {stats?.faculty_stats && stats.faculty_stats.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Faculties</h3>
+          <div className="space-y-3">
+            {stats.faculty_stats.map((faculty, index) => (
+              <div key={index} className="space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span className="font-medium text-gray-700 truncate flex-1 mr-2">
+                    {faculty.name}
+                  </span>
+                  <span className="text-gray-500 whitespace-nowrap">
+                    {faculty.count} ({faculty.percentage.toFixed(1)}%)
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div
+                    className="bg-teal-500 h-3 rounded-full"
+                    style={{ width: `${faculty.percentage}%` }}
                   ></div>
                 </div>
               </div>
@@ -3362,12 +3880,57 @@ const AttendanceTab  = () => {
 
         <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Daily Activity</h3>
-          <DailyActivityChart selectedDay={selectedDay} />
+          {stats?.daily_activity && stats.daily_activity.length > 0 ? (
+            <div className="space-y-3">
+              {stats.daily_activity.map((activity, index) => (
+                <div key={index} className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium text-gray-700">{activity.hour}</span>
+                    <span className="text-green-600">Entries: {activity.entries}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div
+                      className="bg-green-500 h-3 rounded-full"
+                      style={{ width: `${(activity.entries / Math.max(...stats.daily_activity.map(a => a.entries), 1)) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-center">No activity data available</p>
+          )}
+        </div>
+      </div>
+
+      {/* Raw Data Summary */}
+      <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Data Summary</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatCard
+            title="Total Unique Attendees"
+            value={rawAttendees.length}
+            icon={<Users className="h-5 w-5" />}
+            color="orange"
+          />
+          <StatCard
+            title="Universities Represented"
+            value={stats?.university_stats.length || 0}
+            icon={<Building className="h-5 w-5" />}
+            color="blue"
+          />
+          <StatCard
+            title="Faculties Represented"
+            value={stats?.faculty_stats.length || 0}
+            icon={<BookOpen className="h-5 w-5" />}
+            color="green"
+          />
         </div>
       </div>
     </div>
   );
 };
+
   const RegistrationStatsView: React.FC<{ statsData: StatsData; timeRange: string }> = ({ statsData, timeRange }) => (
     <div className="space-y-6 sm:space-y-8 fade-in-blur">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 stagger-children">
