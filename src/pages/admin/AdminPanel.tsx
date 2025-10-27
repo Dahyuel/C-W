@@ -132,6 +132,23 @@ interface EventItem {
   speaker_photo_url?: string; // Add this
   speaker_linkedin_url?: string; // Add this
 }
+// Update the StatisticsData interface
+interface StatisticsData {
+  totalAttendees: number;
+  genderDistribution: { male: number; female: number; other: number };
+  universityDistribution: Array<{ name: string; count: number; percentage: number }>;
+  facultyDistribution: Array<{ name: string; count: number; percentage: number }>;
+  degreeLevelDistribution: Array<{ name: string; count: number; percentage: number }>;
+  programDistribution: Array<{ name: string; count: number; percentage: number }>;
+  classDistribution: Array<{ name: string; count: number; percentage: number }>;
+  howDidHearDistribution: Array<{ name: string; count: number; percentage: number }>;
+  registrationTrend: Array<{ date: string; count: number }>;
+  completionStats: {
+    total: number;
+    completed: number;
+    uncompleted: number;
+  };
+}
 
 interface UserProfileItem {
   id: string;
@@ -213,11 +230,12 @@ export function AdminPanel() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [companies, setCompanies] = useState<CompanyItem[]>([]);
   const [activeDay, setActiveDay] = useState(1);
-
+  const [mapImages, setMapImages] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [companyModal, setCompanyModal] = useState(false);
   const [sessionModal, setSessionModal] = useState(false);
   const [eventModal, setEventModal] = useState(false);
+  const [mapModal, setMapModal] = useState(false);
   const [announcementModal, setAnnouncementModal] = useState(false);
   const [sessionDetailModal, setSessionDetailModal] = useState(false);
   const [companyDetailModal, setCompanyDetailModal] = useState(false);
@@ -235,11 +253,7 @@ export function AdminPanel() {
   const [selectedCompanyEdit, setSelectedCompanyEdit] = useState<CompanyItem | null>(null);
   const [eventDetailModal, setEventDetailModal] = useState(false);
   const [selectedEventDetail, setSelectedEventDetail] = useState<EventItem | null>(null);
-  const [mapModal, setMapModal] = useState(false);
-  const [mapForm, setMapForm] = useState({
-    day: 1,
-    image: null as File | null
-  });
+  const [loadingStatistics, setLoadingStatistics] = useState(false);
   // New state for academic faculties and vacancies type
   const [selectedAcademicFaculties, setSelectedAcademicFaculties] = useState<string[]>([]);
   const [selectedVacanciesTypes, setSelectedVacanciesTypes] = useState<string[]>([]);
@@ -253,7 +267,32 @@ export function AdminPanel() {
   const [selectedBooking, setSelectedBooking] = useState<AttendanceItem | null>(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [deleteBookingModal, setDeleteBookingModal] = useState(false);
-  
+  // Add these state variables with your other state declarations
+const [statisticsTab, setStatisticsTab] = useState<"general" | "filter">("general");
+const [filteredUsers, setFilteredUsers] = useState<UserProfileItem[]>([]);
+const [currentPage, setCurrentPage] = useState(1);
+const [filters, setFilters] = useState({
+  university: "",
+  faculty: "",
+  gender: "",
+  degree_level: "",
+  program: "",
+  class: "",
+  how_did_hear_about_event: ""
+});
+const [filterOptions, setFilterOptions] = useState({
+  universities: [] as string[],
+  faculties: [] as string[],
+  programs: [] as string[],
+  classes: [] as string[],
+  howDidHearOptions: [] as string[]
+});
+const [selectedUserDetail, setSelectedUserDetail] = useState<UserProfileItem | null>(null);
+const [userDetailModal, setUserDetailModal] = useState(false);
+const [searchPersonalId, setSearchPersonalId] = useState("");
+const [loadingUsers, setLoadingUsers] = useState(false);
+const [totalUsersCount, setTotalUsersCount] = useState(0);
+const [statisticsData, setStatisticsData] = useState<StatisticsData | null>(null);
   // Mobile menu state
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -464,6 +503,10 @@ const [newEvent, setNewEvent] = useState<{
   speakerLinkedIn: "" // Add this
 });
 
+  const [mapForm, setMapForm] = useState<{ day: number; image: File | null;}>({
+    day: 1,
+    image: null
+  });
 
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
@@ -502,35 +545,39 @@ const [newEvent, setNewEvent] = useState<{
   const [previousTab, setPreviousTab] = useState("dashboard");
 
   const StatCard: React.FC<{ 
-  title: string; 
-  value: number | string | JSX.Element; 
-  icon: JSX.Element; 
-  color: 'blue' | 'green' | 'purple' | 'orange' | 'red'; 
-}> = ({ title, value, icon, color }) => {
-  const colorClasses = {
-    blue: 'bg-blue-500',
-    green: 'bg-green-500',
-    purple: 'bg-purple-500',
-    orange: 'bg-orange-500',
-    red: 'bg-red-500'
-  };
-
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="text-3xl font-bold text-gray-900">{value}</p>
-        </div>
-        <div className={`w-12 h-12 ${colorClasses[color]} bg-opacity-10 rounded-lg flex items-center justify-center`}>
-          <div className={colorClasses[color].replace('bg-', 'text-')}>
-            {icon}
+    title: string; 
+    value: number | string | JSX.Element; 
+    icon: JSX.Element; 
+    color: 'blue' | 'green' | 'purple' | 'orange' | 'red'; 
+  }> = ({ title, value, icon, color }) => {
+    const colorClasses = {
+      blue: 'bg-blue-500',
+      green: 'bg-green-500',
+      purple: 'bg-purple-500',
+      orange: 'bg-orange-500',
+      red: 'bg-red-500'
+    };
+  
+    // Get the color class safely
+    const bgColorClass = colorClasses[color] || 'bg-gray-500'; // fallback to gray
+    const textColorClass = bgColorClass.replace('bg-', 'text-');
+  
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover dashboard-card">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-600">{title}</p>
+            <p className="text-3xl font-bold text-gray-900">{value}</p>
+          </div>
+          <div className={`w-12 h-12 ${bgColorClass} bg-opacity-10 rounded-lg flex items-center justify-center`}>
+            <div className={textColorClass}>
+              {icon}
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
 
 // Current State Widget Component
 const CurrentStateWidget = () => {
@@ -634,6 +681,318 @@ const CurrentStateWidget = () => {
     </div>
   );
 };
+// Add these functions to your component
+
+// Replace the fetchFilterOptions function with this:
+const fetchFilterOptions = async () => {
+  try {
+    // Fetch unique values for each filter from profile_complete users only
+    const { data: universities } = await supabase
+      .from('users_profiles')
+      .select('university')
+      .not('university', 'is', null)
+      .eq('role', 'attendee')
+      .eq('profile_complete', true); // Add this
+
+    const { data: faculties } = await supabase
+      .from('users_profiles')
+      .select('faculty')
+      .not('faculty', 'is', null)
+      .eq('role', 'attendee')
+      .eq('profile_complete', true); // Add this
+
+    const { data: programs } = await supabase
+      .from('users_profiles')
+      .select('program')
+      .not('program', 'is', null)
+      .eq('role', 'attendee')
+      .eq('profile_complete', true); // Add this
+
+    const { data: classes } = await supabase
+      .from('users_profiles')
+      .select('class')
+      .not('class', 'is', null)
+      .eq('role', 'attendee')
+      .eq('profile_complete', true); // Add this
+
+    const { data: howDidHear } = await supabase
+      .from('users_profiles')
+      .select('how_did_hear_about_event')
+      .not('how_did_hear_about_event', 'is', null)
+      .eq('role', 'attendee')
+      .eq('profile_complete', true); // Add this
+
+    setFilterOptions({
+      universities: [...new Set(universities?.map(u => u.university).filter(Boolean))] as string[],
+      faculties: [...new Set(faculties?.map(f => f.faculty).filter(Boolean))] as string[],
+      programs: [...new Set(programs?.map(p => p.program).filter(Boolean))] as string[],
+      classes: [...new Set(classes?.map(c => c.class).filter(Boolean))] as string[],
+      howDidHearOptions: [...new Set(howDidHear?.map(h => h.how_did_hear_about_event).filter(Boolean))] as string[]
+    });
+  } catch (error) {
+    console.error('Error fetching filter options:', error);
+  }
+};
+
+// Replace the fetchFilteredUsers function with this:
+const fetchFilteredUsers = async (page: number = 1) => {
+  setLoadingUsers(true);
+  try {
+    let query = supabase
+      .from('users_profiles')
+      .select('*', { count: 'exact' })
+      .eq('role', 'attendee')
+      .eq('profile_complete', true); // Add this line
+
+    // Apply filters
+    if (filters.university) query = query.eq('university', filters.university);
+    if (filters.faculty) query = query.eq('faculty', filters.faculty);
+    if (filters.gender) query = query.eq('gender', filters.gender);
+    if (filters.degree_level) query = query.eq('degree_level', filters.degree_level);
+    if (filters.program) query = query.eq('program', filters.program);
+    if (filters.class) query = query.eq('class', filters.class);
+    if (filters.how_did_hear_about_event) query = query.eq('how_did_hear_about_event', filters.how_did_hear_about_event);
+
+    // Apply search
+    if (searchPersonalId) {
+      query = query.ilike('personal_id', `%${searchPersonalId}%`);
+    }
+
+    const from = (page - 1) * 100;
+    const to = from + 99;
+
+    const { data, error, count } = await query
+      .range(from, to)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    setFilteredUsers(data || []);
+    setTotalUsersCount(count || 0);
+    setCurrentPage(page);
+  } catch (error) {
+    console.error('Error fetching filtered users:', error);
+    setFilteredUsers([]);
+  } finally {
+    setLoadingUsers(false);
+  }
+};
+
+// Replace the fetchStatisticsData function with this:
+const fetchStatisticsData = async () => {
+  setLoadingStatistics(true);
+  try {
+    let allAttendees: any[] = [];
+    let page = 0;
+    const pageSize = 1000;
+    let hasMore = true;
+
+    console.log('🔄 Starting to fetch all attendees with profile_complete = true...');
+
+    // Fetch only profile_complete = true attendees
+    while (hasMore) {
+      const from = page * pageSize;
+      const to = from + pageSize - 1;
+      
+      const { data: attendees, error } = await supabase
+        .from('users_profiles')
+        .select('*')
+        .eq('role', 'attendee')
+        .eq('profile_complete', true) // Only completed profiles
+        .range(from, to);
+
+      if (error) throw error;
+
+      if (attendees && attendees.length > 0) {
+        allAttendees = [...allAttendees, ...attendees];
+        page++;
+        
+        console.log(`📊 Fetched page ${page}: ${attendees.length} attendees (Total: ${allAttendees.length})`);
+
+        if (attendees.length < pageSize) {
+          hasMore = false;
+        }
+      } else {
+        hasMore = false;
+      }
+    }
+
+    // Also get total counts for completion stats
+    const { count: totalAttendeesCount } = await supabase
+      .from('users_profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'attendee');
+
+    const { count: completedProfilesCount } = await supabase
+      .from('users_profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'attendee')
+      .eq('profile_complete', true);
+
+    const completionStats = {
+      total: totalAttendeesCount || 0,
+      completed: completedProfilesCount || 0,
+      uncompleted: (totalAttendeesCount || 0) - (completedProfilesCount || 0)
+    };
+
+    if (allAttendees.length === 0) {
+      setStatisticsData({
+        totalAttendees: 0,
+        genderDistribution: { male: 0, female: 0, other: 0 },
+        universityDistribution: [],
+        facultyDistribution: [],
+        degreeLevelDistribution: [],
+        programDistribution: [],
+        classDistribution: [],
+        howDidHearDistribution: [],
+        registrationTrend: [],
+        completionStats
+      });
+      return;
+    }
+
+    // Calculate statistics from completed profiles only
+    const totalCompletedAttendees = allAttendees.length;
+
+    // Gender distribution (filter out null/undefined)
+    const genderCount = allAttendees.reduce((acc, user) => {
+      const gender = user.gender;
+      if (gender && gender !== 'Not Specified') {
+        acc[gender] = (acc[gender] || 0) + 1;
+      }
+      return acc;
+    }, {} as Record<string, number>);
+
+    const genderDistribution = {
+      male: genderCount.male || 0,
+      female: genderCount.female || 0,
+      other: genderCount.other || 0
+    };
+
+    // Calculate distributions (filter out "Not Specified" and null/undefined)
+    const universityDistribution = calculateDistributionFiltered(allAttendees, 'university');
+    const facultyDistribution = calculateDistributionFiltered(allAttendees, 'faculty');
+    const degreeLevelDistribution = calculateDistributionFiltered(allAttendees, 'degree_level');
+    const programDistribution = calculateDistributionFiltered(allAttendees, 'program');
+    const classDistribution = calculateDistributionFiltered(allAttendees, 'class');
+    const howDidHearDistribution = calculateDistributionFiltered(allAttendees, 'how_did_hear_about_event');
+
+    // Registration trend (last 30 days) - only completed profiles
+    const registrationTrend = calculateRegistrationTrend(allAttendees);
+
+    setStatisticsData({
+      totalAttendees: totalCompletedAttendees,
+      genderDistribution,
+      universityDistribution: universityDistribution.slice(0, 10),
+      facultyDistribution: facultyDistribution.slice(0, 10),
+      degreeLevelDistribution,
+      programDistribution: programDistribution.slice(0, 10),
+      classDistribution,
+      howDidHearDistribution,
+      registrationTrend,
+      completionStats // Add completion stats
+    });
+
+    console.log(`✅ Loaded ${allAttendees.length} completed profiles for statistics`);
+
+  } catch (error) {
+    console.error('Error fetching statistics data:', error);
+  } finally {
+    setLoadingStatistics(false);
+  }
+};
+// Add this helper function to filter out "Not Specified" and null values
+const calculateDistributionFiltered = (users: any[], field: string) => {
+  const distribution = users.reduce((acc, user) => {
+    const value = user[field];
+    // Filter out null, undefined, empty strings, and "Not Specified"
+    if (value && value !== '' && value !== 'Not Specified' && !value.toLowerCase().includes('not specified')) {
+      acc[value] = (acc[value] || 0) + 1;
+    }
+    return acc;
+  }, {} as Record<string, number>);
+
+  return Object.entries(distribution)
+    .map(([name, count]) => ({
+      name,
+      count,
+      percentage: (count / users.length) * 100
+    }))
+    .sort((a, b) => b.count - a.count);
+};
+// Helper function to calculate distribution
+const calculateDistribution = (users: any[], field: string) => {
+  const distribution = users.reduce((acc, user) => {
+    const value = user[field] || 'Not Specified';
+    acc[value] = (acc[value] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  return Object.entries(distribution)
+    .map(([name, count]) => ({
+      name,
+      count,
+      percentage: (count / users.length) * 100
+    }))
+    .sort((a, b) => b.count - a.count);
+};
+
+// Helper function to calculate registration trend
+const calculateRegistrationTrend = (users: any[]) => {
+  const last30Days = Array.from({ length: 30 }, (_, i) => {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    return date.toISOString().split('T')[0];
+  }).reverse();
+
+  return last30Days.map(date => {
+    const count = users.filter(user => 
+      user.created_at && user.created_at.startsWith(date)
+    ).length;
+    return { date, count };
+  });
+};
+
+// Handle filter change
+const handleFilterChange = (key: string, value: string) => {
+  setFilters(prev => ({
+    ...prev,
+    [key]: value
+  }));
+};
+
+// Clear all filters
+const clearFilters = () => {
+  setFilters({
+    university: "",
+    faculty: "",
+    gender: "",
+    degree_level: "",
+    program: "",
+    class: "",
+    how_did_hear_about_event: ""
+  });
+  setSearchPersonalId("");
+};
+
+// Handle user card click
+const handleUserCardClick = (user: UserProfileItem) => {
+  setSelectedUserDetail(user);
+  setUserDetailModal(true);
+};
+// Add these useEffect hooks
+useEffect(() => {
+  if (activeTab === "statistics") {
+    fetchFilterOptions();
+    fetchStatisticsData();
+  }
+}, [activeTab]);
+
+useEffect(() => {
+  if (statisticsTab === "filter" && activeTab === "statistics") {
+    fetchFilteredUsers(1);
+  }
+}, [statisticsTab, filters, searchPersonalId, activeTab]);
 
 // Today's Event Entries Component
 const TodayEventEntries = () => {
@@ -1766,8 +2125,1032 @@ const handleEditCompany = (company: CompanyItem) => {
 // Replace the existing StatisticsTab component with this:
 
 // Replace the existing StatisticsTab component with this:
-
+// Add this new StatisticsTab component
 const StatisticsTab = () => {
+  return (
+    <div className="fade-in-blur">
+      {/* Tab Selection */}
+      <div className="flex space-x-4 mb-6 border-b">
+        <button
+          onClick={() => setStatisticsTab("general")}
+          className={`py-3 px-6 font-semibold border-b-2 transition-all duration-300 ${
+            statisticsTab === "general"
+              ? "border-orange-500 text-orange-600"
+              : "border-transparent text-gray-500 hover:text-orange-600"
+          }`}
+        >
+          <BarChart3 className="h-5 w-5 mr-2 inline" />
+          General Analytics
+        </button>
+        <button
+          onClick={() => setStatisticsTab("filter")}
+          className={`py-3 px-6 font-semibold border-b-2 transition-all duration-300 ${
+            statisticsTab === "filter"
+              ? "border-orange-500 text-orange-600"
+              : "border-transparent text-gray-500 hover:text-orange-600"
+          }`}
+        >
+          <Users className="h-5 w-5 mr-2 inline" />
+          By Filter
+        </button>
+      </div>
+
+      {/* Content based on selected tab */}
+      {statisticsTab === "general" ? (
+        <GeneralAnalyticsView />
+      ) : (
+        <FilterView />
+      )}
+
+      {/* User Detail Modal */}
+      {userDetailModal && selectedUserDetail && (
+        <UserDetailModal 
+          user={selectedUserDetail}
+          onClose={() => setUserDetailModal(false)}
+        />
+      )}
+    </div>
+  );
+};
+
+// Add these components for the Statistics tab
+
+  // General Analytics View Component
+  const GeneralAnalyticsView = () => {
+    if (!statisticsData) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        {/* Overview Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCard
+            title="Total Attendees"
+            value={statisticsData.totalAttendees}
+            icon={<Users className="h-6 w-6" />}
+            color="blue"
+          />
+          <StatCard
+            title="Male"
+            value={statisticsData.genderDistribution.male}
+            icon={<User className="h-6 w-6" />}
+            color="blue"
+          />
+          <StatCard
+            title="Female"
+            value={statisticsData.genderDistribution.female}
+            icon={<User className="h-6 w-6" />}
+            color="pink"
+          />
+          <StatCard
+            title="Other/Unspecified"
+            value={statisticsData.genderDistribution.other}
+            icon={<User className="h-6 w-6" />}
+            color="purple"
+          />
+        </div>
+
+      {/* Charts Grid */}
+<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  {/* Gender Distribution */}
+  {statisticsData.genderDistribution.male + statisticsData.genderDistribution.female + statisticsData.genderDistribution.other > 0 && (
+    <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Gender Distribution</h3>
+      <PieChart
+        data={[
+          { name: 'Male', value: statisticsData.genderDistribution.male, color: '#3b82f6' },
+          { name: 'Female', value: statisticsData.genderDistribution.female, color: '#ec4899' },
+          { name: 'Other', value: statisticsData.genderDistribution.other, color: '#8b5cf6' }
+        ]}
+      />
+    </div>
+  )}
+
+  {/* Class Distribution */}
+  {statisticsData.classDistribution.length > 0 && (
+    <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Class Distribution</h3>
+      <DonutChart
+        data={statisticsData.classDistribution}
+      />
+    </div>
+  )}
+
+  {/* Top Universities */}
+  {statisticsData.universityDistribution.length > 0 && (
+    <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Universities</h3>
+      <BarChartHorizontal
+        data={statisticsData.universityDistribution}
+        color="#f59e0b"
+      />
+    </div>
+  )}
+
+  {/* Top Faculties */}
+  {statisticsData.facultyDistribution.length > 0 && (
+    <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Faculties</h3>
+      <BarChartHorizontal
+        data={statisticsData.facultyDistribution}
+        color="#10b981"
+      />
+    </div>
+  )}
+
+  {/* Degree Level Distribution */}
+  {statisticsData.degreeLevelDistribution.length > 0 && (
+    <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Degree Level</h3>
+      <DonutChart
+        data={statisticsData.degreeLevelDistribution}
+      />
+    </div>
+  )}
+
+  {/* Registration Trend */}
+  {statisticsData.registrationTrend.filter(item => item.count > 0).length > 0 && (
+    <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover lg:col-span-2">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Registration Trend - Completed Profiles (Last 30 Days)</h3>
+      <LineChart
+        data={statisticsData.registrationTrend}
+      />
+    </div>
+  )}
+</div>
+
+{/* Additional Statistics */}
+<div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+  {/* Program Distribution */}
+  <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
+    <h3 className="text-lg font-semibold text-gray-900 mb-4">Program Distribution</h3>
+    <SimpleList data={statisticsData.programDistribution} />
+  </div>
+
+  {/* How Did You Hear About Us */}
+  <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 fade-in-blur card-hover">
+    <h3 className="text-lg font-semibold text-gray-900 mb-4">Marketing Sources</h3>
+    <SimpleList data={statisticsData.howDidHearDistribution} />
+  </div>
+</div>
+</div>
+  );
+};
+
+// Replace the FilterView component with this improved version
+const FilterView = () => {
+  const [searchTerm, setSearchTerm] = useState(searchPersonalId);
+  const [isSearching, setIsSearching] = useState(false);
+  const totalPages = Math.ceil(totalUsersCount / 100);
+
+  // Handle search with Enter key
+  const handleSearch = (e?: React.KeyboardEvent) => {
+    if (e && e.key !== 'Enter') return;
+    
+    setIsSearching(true);
+    setSearchPersonalId(searchTerm);
+    fetchFilteredUsers(1).finally(() => setIsSearching(false));
+  };
+
+  // Clear search
+  const handleClearSearch = () => {
+    setSearchTerm("");
+    setSearchPersonalId("");
+    fetchFilteredUsers(1);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Filters Section - Improved UI */}
+      <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6 gap-4">
+          <h3 className="text-xl font-bold text-gray-900 flex items-center">
+            <Users className="h-5 w-5 mr-2 text-orange-600" />
+            Filter Attendees
+          </h3>
+          <button
+            onClick={clearFilters}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all duration-300 font-medium text-sm w-fit"
+          >
+            Clear All Filters
+          </button>
+        </div>
+
+        {/* Search Section */}
+        <div className="mb-6 p-4 bg-orange-50 rounded-lg border border-orange-200">
+          <label className="block text-sm font-semibold text-orange-800 mb-3">
+            🔍 Search by Personal ID
+          </label>
+          <div className="flex gap-2">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyPress={(e) => handleSearch(e)}
+                placeholder="Enter Personal ID and press Enter..."
+                className="w-full border border-orange-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 bg-white"
+              />
+              {searchTerm && (
+                <button
+                  onClick={handleClearSearch}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            <button
+              onClick={() => handleSearch()}
+              disabled={isSearching}
+              className="px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-all duration-300 font-medium flex items-center gap-2"
+            >
+              {isSearching ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+              ) : (
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              )}
+              Search
+            </button>
+          </div>
+          <p className="text-xs text-orange-600 mt-2">
+            💡 Press Enter or click Search to find attendees
+          </p>
+        </div>
+
+        {/* Filters Grid - Improved Layout */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {/* University Filter */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              🏛️ University
+            </label>
+            <select
+              value={filters.university}
+              onChange={(e) => handleFilterChange('university', e.target.value)}
+              className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 bg-white"
+            >
+              <option value="">All Universities</option>
+              {filterOptions.universities.map(uni => (
+                <option key={uni} value={uni}>{uni}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Faculty Filter */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              📚 Faculty
+            </label>
+            <select
+              value={filters.faculty}
+              onChange={(e) => handleFilterChange('faculty', e.target.value)}
+              className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 bg-white"
+            >
+              <option value="">All Faculties</option>
+              {filterOptions.faculties.map(faculty => (
+                <option key={faculty} value={faculty}>{faculty}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Gender Filter */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              👤 Gender
+            </label>
+            <select
+              value={filters.gender}
+              onChange={(e) => handleFilterChange('gender', e.target.value)}
+              className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 bg-white"
+            >
+              <option value="">All Genders</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+            </select>
+          </div>
+
+          {/* Degree Level Filter */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              🎓 Degree Level
+            </label>
+            <select
+              value={filters.degree_level}
+              onChange={(e) => handleFilterChange('degree_level', e.target.value)}
+              className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 bg-white"
+            >
+              <option value="">All Degree Levels</option>
+              <option value="student">Student</option>
+              <option value="graduate">Graduate</option>
+            </select>
+          </div>
+
+          {/* Program Filter */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              📝 Program
+            </label>
+            <select
+              value={filters.program}
+              onChange={(e) => handleFilterChange('program', e.target.value)}
+              className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 bg-white"
+            >
+              <option value="">All Programs</option>
+              {filterOptions.programs.map(program => (
+                <option key={program} value={program}>{program}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Class Filter */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              📅 Class
+            </label>
+            <select
+              value={filters.class}
+              onChange={(e) => handleFilterChange('class', e.target.value)}
+              className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 bg-white"
+            >
+              <option value="">All Classes</option>
+              {filterOptions.classes.map(cls => (
+                <option key={cls} value={cls}>{cls}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* How Did You Hear Filter */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              📢 Marketing Source
+            </label>
+            <select
+              value={filters.how_did_hear_about_event}
+              onChange={(e) => handleFilterChange('how_did_hear_about_event', e.target.value)}
+              className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 bg-white"
+            >
+              <option value="">All Sources</option>
+              {filterOptions.howDidHearOptions.map(source => (
+                <option key={source} value={source}>{source}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Active Filters Badges */}
+        {(filters.university || filters.faculty || filters.gender || filters.degree_level || 
+          filters.program || filters.class || filters.how_did_hear_about_event || searchPersonalId) && (
+          <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <h4 className="text-sm font-semibold text-blue-800 mb-3">Active Filters:</h4>
+            <div className="flex flex-wrap gap-2">
+              {filters.university && (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  🏛️ {filters.university}
+                  <button
+                    onClick={() => handleFilterChange('university', '')}
+                    className="ml-1 text-blue-600 hover:text-blue-800"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {filters.faculty && (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  📚 {filters.faculty}
+                  <button
+                    onClick={() => handleFilterChange('faculty', '')}
+                    className="ml-1 text-green-600 hover:text-green-800"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {filters.gender && (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                  👤 {filters.gender}
+                  <button
+                    onClick={() => handleFilterChange('gender', '')}
+                    className="ml-1 text-purple-600 hover:text-purple-800"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {filters.degree_level && (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                  🎓 {filters.degree_level}
+                  <button
+                    onClick={() => handleFilterChange('degree_level', '')}
+                    className="ml-1 text-yellow-600 hover:text-yellow-800"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {filters.program && (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                  📝 {filters.program}
+                  <button
+                    onClick={() => handleFilterChange('program', '')}
+                    className="ml-1 text-indigo-600 hover:text-indigo-800"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {filters.class && (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-pink-100 text-pink-800">
+                  📅 {filters.class}
+                  <button
+                    onClick={() => handleFilterChange('class', '')}
+                    className="ml-1 text-pink-600 hover:text-pink-800"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {filters.how_did_hear_about_event && (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                  📢 {filters.how_did_hear_about_event}
+                  <button
+                    onClick={() => handleFilterChange('how_did_hear_about_event', '')}
+                    className="ml-1 text-red-600 hover:text-red-800"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {searchPersonalId && (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                  🔍 {searchPersonalId}
+                  <button
+                    onClick={handleClearSearch}
+                    className="ml-1 text-orange-600 hover:text-orange-800"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Results Section - Improved UI */}
+      <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6 gap-4">
+          <div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">
+              📊 Results
+            </h3>
+            <p className="text-sm text-gray-600">
+              Found <span className="font-semibold text-orange-600">{totalUsersCount}</span> attendees matching your criteria
+            </p>
+          </div>
+          
+          {/* Pagination Controls */}
+          {totalUsersCount > 0 && (
+            <div className="flex items-center space-x-4">
+              <span className="text-sm text-gray-600">
+                Page <span className="font-semibold">{currentPage}</span> of <span className="font-semibold">{totalPages}</span>
+              </span>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => fetchFilteredUsers(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-all duration-300 font-medium text-sm flex items-center gap-2"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Previous
+                </button>
+                <button
+                  onClick={() => fetchFilteredUsers(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="px-4 py-2 bg-orange-500 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-orange-600 transition-all duration-300 font-medium text-sm flex items-center gap-2"
+                >
+                  Next
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {loadingUsers ? (
+          <div className="flex flex-col items-center justify-center h-32 space-y-3">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+            <p className="text-gray-500 text-sm">Loading attendees...</p>
+          </div>
+        ) : (
+          <>
+            {filteredUsers.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filteredUsers.map((user) => (
+                  <UserCard 
+                    key={user.id} 
+                    user={user} 
+                    onClick={() => handleUserCardClick(user)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <Users className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                <h4 className="text-lg font-semibold text-gray-900 mb-2">No attendees found</h4>
+                <p className="text-gray-500 max-w-md mx-auto">
+                  {searchPersonalId || Object.values(filters).some(f => f) 
+                    ? "Try adjusting your filters or search criteria to find more results."
+                    : "No attendees match your current criteria. Try different filters."
+                  }
+                </p>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Bottom Pagination */}
+        {totalUsersCount > 0 && (
+          <div className="flex justify-center mt-8 pt-6 border-t border-gray-200">
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={() => fetchFilteredUsers(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-all duration-300 font-medium text-sm"
+              >
+                Previous
+              </button>
+              
+              <div className="flex items-center space-x-2">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  const pageNum = i + 1;
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => fetchFilteredUsers(pageNum)}
+                      className={`w-8 h-8 rounded-lg font-medium text-sm transition-all duration-300 ${
+                        currentPage === pageNum
+                          ? 'bg-orange-500 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                {totalPages > 5 && (
+                  <span className="text-gray-500">...</span>
+                )}
+              </div>
+              
+              <button
+                onClick={() => fetchFilteredUsers(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 bg-orange-500 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-orange-600 transition-all duration-300 font-medium text-sm"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Also update the UserCard component to be more visually appealing
+const UserCard = ({ user, onClick }: { user: UserProfileItem; onClick: () => void }) => {
+  return (
+    <div
+      onClick={onClick}
+      className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-lg transition-all duration-300 cursor-pointer transform hover:-translate-y-1 group"
+    >
+      <div className="flex items-center space-x-3 mb-3">
+        <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-orange-600 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+          <User className="h-6 w-6 text-white" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h4 className="font-bold text-gray-900 truncate group-hover:text-orange-600 transition-colors">
+            {user.first_name} {user.last_name}
+          </h4>
+          <p className="text-sm text-gray-500 font-mono">{user.personal_id}</p>
+        </div>
+      </div>
+      
+      <div className="space-y-2 text-sm">
+        {user.university && (
+          <div className="flex items-center text-gray-600">
+            <span className="w-20 font-medium">University:</span>
+            <span className="flex-1 text-gray-900 truncate">{user.university}</span>
+          </div>
+        )}
+        {user.faculty && (
+          <div className="flex items-center text-gray-600">
+            <span className="w-20 font-medium">Faculty:</span>
+            <span className="flex-1 text-gray-900 truncate">{user.faculty}</span>
+          </div>
+        )}
+        {user.gender && (
+          <div className="flex items-center text-gray-600">
+            <span className="w-20 font-medium">Gender:</span>
+            <span className="flex-1 text-gray-900 capitalize">{user.gender}</span>
+          </div>
+        )}
+        {user.degree_level && (
+          <div className="flex items-center text-gray-600">
+            <span className="w-20 font-medium">Degree:</span>
+            <span className="flex-1 text-gray-900 capitalize">{user.degree_level}</span>
+          </div>
+        )}
+      </div>
+      
+      <div className="mt-3 pt-3 border-t border-gray-100">
+        <button className="w-full py-2 bg-orange-50 text-orange-600 rounded-lg hover:bg-orange-100 transition-colors text-sm font-medium">
+          View Details
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// User Detail Modal Component
+const UserDetailModal = ({ user, onClose }: { user: UserProfileItem; onClose: () => void }) => {
+  return createPortal(
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-gray-900">Attendee Details</h2>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
+
+          <div className="space-y-6">
+            {/* Personal Information */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">First Name</label>
+                <p className="text-gray-900">{user.first_name}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Last Name</label>
+                <p className="text-gray-900">{user.last_name}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Personal ID</label>
+                <p className="text-gray-900 font-mono">{user.personal_id}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Email</label>
+                <p className="text-gray-900">{user.email}</p>
+              </div>
+            </div>
+
+            {/* Academic Information */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Academic Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {user.university && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">University</label>
+                    <p className="text-gray-900">{user.university}</p>
+                  </div>
+                )}
+                {user.faculty && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Faculty</label>
+                    <p className="text-gray-900">{user.faculty}</p>
+                  </div>
+                )}
+                {user.program && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Program</label>
+                    <p className="text-gray-900">{user.program}</p>
+                  </div>
+                )}
+                {user.degree_level && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Degree Level</label>
+                    <p className="text-gray-900 capitalize">{user.degree_level}</p>
+                  </div>
+                )}
+                {user.class && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Class</label>
+                    <p className="text-gray-900">{user.class}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Additional Information */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {user.gender && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Gender</label>
+                    <p className="text-gray-900 capitalize">{user.gender}</p>
+                  </div>
+                )}
+                {user.nationality && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Nationality</label>
+                    <p className="text-gray-900">{user.nationality}</p>
+                  </div>
+                )}
+                {user.how_did_hear_about_event && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">How did you hear about us</label>
+                    <p className="text-gray-900">{user.how_did_hear_about_event}</p>
+                  </div>
+                )}
+                {user.phone && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Phone</label>
+                    <p className="text-gray-900">{user.phone}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Registration Info */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Registration Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Registered On</label>
+                  <p className="text-gray-900">
+                    {user.created_at ? new Date(user.created_at).toLocaleDateString() : 'Unknown'}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Profile Complete</label>
+                  <p className="text-gray-900">
+                    {user.profile_complete ? 'Yes' : 'No'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 flex justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+// Add these chart components
+
+// Pie Chart Component
+const PieChart = ({ data }: { data: Array<{ name: string; value: number; color: string }> }) => {
+  const total = data.reduce((sum, item) => sum + item.value, 0);
+  
+  return (
+    <div className="flex items-center justify-center">
+      <div className="relative w-48 h-48">
+        <svg viewBox="0 0 100 100" className="w-full h-full">
+          {data.reduce((prev, item, index) => {
+            const percentage = (item.value / total) * 100;
+            const circumference = 2 * Math.PI * 40;
+            const strokeDasharray = `${(percentage / 100) * circumference} ${circumference}`;
+            const rotation = prev.rotation;
+            
+            const element = (
+              <circle
+                key={index}
+                cx="50"
+                cy="50"
+                r="40"
+                fill="none"
+                stroke={item.color}
+                strokeWidth="20"
+                strokeDasharray={strokeDasharray}
+                transform={`rotate(${rotation - 90} 50 50)`}
+              />
+            );
+            
+            return {
+              rotation: rotation + (percentage * 3.6),
+              elements: [...prev.elements, element]
+            };
+          }, { rotation: 0, elements: [] as JSX.Element[] }).elements}
+        </svg>
+      </div>
+      <div className="ml-6 space-y-2">
+        {data.map((item, index) => (
+          <div key={index} className="flex items-center">
+            <div 
+              className="w-3 h-3 rounded-full mr-2"
+              style={{ backgroundColor: item.color }}
+            />
+            <span className="text-sm text-gray-700">
+              {item.name}: {item.value} ({(item.value / total * 100).toFixed(1)}%)
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Horizontal Bar Chart Component
+const BarChartHorizontal = ({ data, color }: { data: Array<{ name: string; count: number; percentage: number }>; color: string }) => {
+  const maxCount = Math.max(...data.map(item => item.count));
+  
+  return (
+    <div className="space-y-3">
+      {data.map((item, index) => (
+        <div key={index} className="space-y-1">
+          <div className="flex justify-between text-sm">
+            <span className="font-medium text-gray-700 truncate flex-1 mr-2">
+              {item.name}
+            </span>
+            <span className="text-gray-500 whitespace-nowrap">
+              {item.count} ({item.percentage.toFixed(1)}%)
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-3">
+            <div
+              className="h-3 rounded-full"
+              style={{ 
+                width: `${(item.count / maxCount) * 100}%`,
+                backgroundColor: color
+              }}
+            ></div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// Donut Chart Component
+const DonutChart = ({ data }: { data: Array<{ name: string; count: number; percentage: number }> }) => {
+  const total = data.reduce((sum, item) => sum + item.count, 0);
+  const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+  
+  return (
+    <div className="flex items-center justify-center">
+      <div className="relative w-40 h-40">
+        <svg viewBox="0 0 100 100" className="w-full h-full">
+          {data.reduce((prev, item, index) => {
+            const percentage = (item.count / total) * 100;
+            const circumference = 2 * Math.PI * 35;
+            const strokeDasharray = `${(percentage / 100) * circumference} ${circumference}`;
+            const rotation = prev.rotation;
+            const color = colors[index % colors.length];
+            
+            const element = (
+              <circle
+                key={index}
+                cx="50"
+                cy="50"
+                r="35"
+                fill="none"
+                stroke={color}
+                strokeWidth="15"
+                strokeDasharray={strokeDasharray}
+                transform={`rotate(${rotation - 90} 50 50)`}
+              />
+            );
+            
+            return {
+              rotation: rotation + (percentage * 3.6),
+              elements: [...prev.elements, element]
+            };
+          }, { rotation: 0, elements: [] as JSX.Element[] }).elements}
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-lg font-bold text-gray-700">{total}</span>
+        </div>
+      </div>
+      <div className="ml-6 space-y-2">
+        {data.map((item, index) => (
+          <div key={index} className="flex items-center">
+            <div 
+              className="w-3 h-3 rounded-full mr-2"
+              style={{ backgroundColor: colors[index % colors.length] }}
+            />
+            <span className="text-sm text-gray-700">
+              {item.name}: {item.count}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Line Chart Component
+const LineChart = ({ data }: { data: Array<{ date: string; count: number }> }) => {
+  const maxCount = Math.max(...data.map(item => item.count));
+  const points = data.map((item, index) => {
+    const x = (index / (data.length - 1)) * 100;
+    const y = 100 - ((item.count / maxCount) * 100);
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <div className="h-64">
+      <svg viewBox="0 0 100 100" className="w-full h-full">
+        {/* Grid lines */}
+        {[0, 25, 50, 75, 100].map((y) => (
+          <line
+            key={y}
+            x1="0"
+            y1={y}
+            x2="100"
+            y2={y}
+            stroke="#e5e7eb"
+            strokeWidth="0.5"
+          />
+        ))}
+        
+        {/* Line */}
+        <polyline
+          fill="none"
+          stroke="#f59e0b"
+          strokeWidth="2"
+          points={points}
+        />
+        
+        {/* Points */}
+        {data.map((item, index) => {
+          const x = (index / (data.length - 1)) * 100;
+          const y = 100 - ((item.count / maxCount) * 100);
+          return (
+            <circle
+              key={index}
+              cx={x}
+              cy={y}
+              r="1.5"
+              fill="#f59e0b"
+            />
+          );
+        })}
+        
+        {/* Labels */}
+        {data.filter((_, index) => index % 5 === 0).map((item, index) => {
+          const x = (index * 5 / (data.length - 1)) * 100;
+          return (
+            <text
+              key={index}
+              x={x}
+              y="105"
+              textAnchor="middle"
+              fontSize="3"
+              fill="#6b7280"
+            >
+              {new Date(item.date).getDate()}
+            </text>
+          );
+        })}
+      </svg>
+    </div>
+  );
+};
+
+// Simple List Component
+const SimpleList = ({ data }: { data: Array<{ name: string; count: number; percentage: number }> }) => {
+  return (
+    <div className="space-y-2">
+      {data.map((item, index) => (
+        <div key={index} className="flex justify-between items-center py-2 border-b border-gray-100">
+          <span className="text-sm text-gray-700">{item.name}</span>
+          <div className="text-right">
+            <span className="text-sm font-medium text-gray-900">{item.count}</span>
+            <span className="text-xs text-gray-500 ml-2">({item.percentage.toFixed(1)}%)</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+const AttendanceTab  = () => {
   const [stats, setStats] = useState<{
     day: number;
     date: string;
@@ -2980,22 +4363,65 @@ const handleEventSubmit = async () => {
     setMapLoading(true);
   }, [activeDay]);
 
-const [mapImages, setMapImages] = useState([
-  "https://lh3.googleusercontent.com/d/1fSh7pKhrgl_exOkwInzdP21CJuiM7kHE", // Day 1
-  "https://lh3.googleusercontent.com/d/1D0ppvGqAtDI-YjtK7n54M29qCbtAsNMu"
-]);
+  const initializeMapImages = () => {
+    const mapUrls = [];
+    for (let day = 1; day <= 5; day++) {
+      const { data: urlData } = supabase.storage
+        .from("Assets")
+        .getPublicUrl(`Maps/day${day}.png`);
+      mapUrls.push(urlData.publicUrl);
+    }
+    setMapImages(mapUrls);
+  };
 
-// Remove the useEffect that calls initializeMapImages
+  useEffect(() => {
+    initializeMapImages();
+  }, []);
 
-  const tabItems = [
-    { key: "dashboard", label: "Dashboard" },
-    { key: "statistics", label: "Statistics" },
-    { key: "sessions", label: "Sessions" },
-    { key: "events", label: "Events" },
-    { key: "maps", label: "Maps" },
-    { key: "companies", label: "Companies" },
-    { key: "open-recruitment", label: "Open Recruitment Days" }
-  ];
+  const handleMapUpload = async () => {
+    if (!mapForm.image) {
+      showFeedback("Please select an image!", "error");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const filePath = `Maps/day${mapForm.day}.png`;
+      
+      const { data, error } = await supabase.storage
+        .from("Assets")
+        .upload(filePath, mapForm.image, {
+          upsert: true
+        });
+
+      if (error) {
+        console.error("Map upload error:", error);
+        showFeedback("Failed to upload map image", "error");
+      } else {
+        showFeedback(`Day ${mapForm.day} map updated successfully!`, "success");
+        initializeMapImages();
+        setMapModal(false);
+        setMapForm({ day: 1, image: null });
+      }
+    } catch (err) {
+      console.error("Map upload exception:", err);
+      showFeedback("Failed to update map", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+// Replace the existing tabItems array with this:
+const tabItems = [
+  { key: "dashboard", label: "Dashboard" },
+  { key: "attendance", label: "Attendance" }, // Renamed from "statistics"
+  { key: "statistics", label: "Statistics" }, // New tab
+  { key: "sessions", label: "Sessions" },
+  { key: "events", label: "Events" },
+  { key: "maps", label: "Maps" },
+  { key: "companies", label: "Companies" },
+  { key: "open-recruitment", label: "Open Recruitment Days" }
+];
 
   if (loadingData) {
     return (
@@ -3169,10 +4595,15 @@ const [mapImages, setMapImages] = useState([
   </div>
 )}
 
-          {/* Statistics Tab */}
-          {activeTab === "statistics" && (
-            <StatisticsTab />
-          )}
+{/* Attendance Tab (formerly Statistics) */}
+{activeTab === "attendance" && (
+  <AttendanceTab />
+)}
+
+{/* New Statistics Tab */}
+{activeTab === "statistics" && (
+  <StatisticsTab />
+)}
 
          {/* Sessions Tab - Responsive */}
 {activeTab === "sessions" && (
@@ -3371,95 +4802,49 @@ const [mapImages, setMapImages] = useState([
             </div>
           )}
 
-         {/* Maps Tab - Responsive */}
-{activeTab === "maps" && (
-  <div className="fade-in-blur">
-    <div className="mb-4 sm:mb-6">
-      <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 fade-in-blur">Event Maps</h2>
-      
-      <div className="flex space-x-1 sm:space-x-2 mb-4 fade-in-blur overflow-x-auto pb-2">
-        {[1, 2, 3, 4, 5].map((day) => (
-          <button
-            key={day}
-            onClick={() => setActiveDay(day)}
-            className={`px-2 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover flex-shrink-0 ${
-              activeDay === day 
-                ? "bg-orange-500 text-white shadow-lg scale-105" 
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200 hover:shadow-md"
-            }`}
-          >
-            Day {day}
-          </button>
-        ))}
-      </div>
-    </div>
-    
-    <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-4 sm:p-6 fade-in-blur card-hover">
-      <div className="text-center mb-4">
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">
-          Day {activeDay} Map
-        </h3>
-        <p className="text-sm text-gray-600">
-          {getDateForDay(activeDay)}
-        </p>
-      </div>
-    {/* Map Image with Loading State */}
-<div className="flex justify-center mb-4">
-  <div className="relative bg-gray-50 rounded-lg border-2 border-dashed border-gray-200 p-4 max-w-2xl w-full">
-    {mapImages[activeDay - 1] ? (
-      <img
-        src={mapImages[activeDay - 1]}
-        alt={`Day ${activeDay} Event Map`}
-        className="max-w-full h-auto rounded-lg shadow-sm mx-auto transform transition-all duration-300 hover:scale-105 cursor-pointer"
-        onClick={() => window.open(mapImages[activeDay - 1], '_blank')}
-        onError={(e) => {
-          // Fallback if image fails to load
-          (e.target as HTMLImageElement).src = "https://via.placeholder.com/600x400?text=Map+Coming+Soon";
-          (e.target as HTMLImageElement).alt = `Day ${activeDay} Map - Coming Soon`;
-        }}
-        onLoad={handleMapLoad}
-      />
-    ) : (
-      <div className="text-center py-12">
-        <MapPin className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-        <p className="text-gray-500">Map for Day {activeDay} coming soon</p>
-        <button
-          onClick={() => setMapModal(true)}
-          className="mt-4 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
-        >
-          Upload Map
-        </button>
-      </div>
-    )}
-    
-    {mapLoading && (
-      <div className="absolute inset-0 bg-white bg-opacity-80 flex items-center justify-center rounded-lg fade-in-blur">
-        <div className="flex flex-col items-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mb-2"></div>
-          <p className="text-sm text-gray-500">Loading map...</p>
-        </div>
-      </div>
-    )}
-  </div>
-</div>
-      {/* Map Information */}
-      <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-        <div className="flex items-start">
-          <MapPin className="h-5 w-5 text-blue-500 mr-3 mt-0.5 flex-shrink-0" />
-          <div>
-            <h4 className="text-blue-800 font-medium text-sm mb-1">Map Information</h4>
-            <ul className="text-blue-700 text-xs space-y-1">
-              <li>• Click on the map to view it in full size</li>
-              <li>• Different colors represent different zones and activities</li>
-              <li>• Locations marked include stages, company booths, and session rooms</li>
-              <li>• Refer to this map for navigation during the event</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
+          {/* Maps Tab - Responsive */}
+          {activeTab === "maps" && (
+            <div className="fade-in-blur">
+              <div className="mb-4 sm:mb-6">
+                <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 fade-in-blur">Event Maps</h2>
+                
+                <div className="flex space-x-1 sm:space-x-2 mb-4 fade-in-blur overflow-x-auto pb-2">
+                  {[1, 2, 3, 4, 5].map((day) => (
+                    <button
+                      key={day}
+                      onClick={() => setActiveDay(day)}
+                      className={`px-2 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 smooth-hover flex-shrink-0 ${
+                        activeDay === day 
+                          ? "bg-orange-500 text-white" 
+                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      }`}
+                    >
+                      Day {day}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="bg-white rounded-xl shadow-sm border p-3 sm:p-4 flex justify-center items-center min-h-[300px] sm:min-h-[400px] fade-in-blur card-hover">
+                {mapLoading && (
+                  <div className="flex flex-col items-center justify-center fade-in-blur">
+                    <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-b-2 border-orange-500 mb-2"></div>
+                    <p className="text-gray-500 text-xs sm:text-sm">Loading map...</p>
+                  </div>
+                )}
+                <img
+                  src={mapImages[activeDay - 1]}
+                  alt={`Day ${activeDay} Map`}
+                  className={`max-w-full h-auto rounded-lg transition-opacity duration-200 ${mapLoading ? 'opacity-0 absolute' : 'opacity-100'}`}
+                  onLoad={handleMapLoad}
+                  onError={(e) => {
+                    handleMapError();
+                    (e.currentTarget as HTMLImageElement).src = "/src/Assets/placeholder-map.jpg";
+                  }}
+                />
+              </div>
+            </div>
+          )}
 
  {/* Companies Tab - Responsive */}
 {activeTab === "companies" && (
