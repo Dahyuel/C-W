@@ -270,6 +270,7 @@ export function AdminPanel() {
 const [statisticsTab, setStatisticsTab] = useState<"general" | "filter">("general");
 const [filteredUsers, setFilteredUsers] = useState<UserProfileItem[]>([]);
 const [currentPage, setCurrentPage] = useState(1);
+// In your filters state, add:
 const [filters, setFilters] = useState({
   university: "",
   faculty: "",
@@ -277,14 +278,17 @@ const [filters, setFilters] = useState({
   degree_level: "",
   program: "",
   class: "",
-  how_did_hear_about_event: ""
+  how_did_hear_about_event: "",
+  attended: "", // Add this - values: "attended", "not_attended", ""
+  attendance_day: "" // Add this - values: "1", "2", "3", "4", "5", ""
 });
 const [filterOptions, setFilterOptions] = useState({
   universities: [] as string[],
   faculties: [] as string[],
   programs: [] as string[],
   classes: [] as string[],
-  howDidHearOptions: [] as string[]
+  howDidHearOptions: [] as string[],
+  attendanceDays: ["1", "2", "3", "4", "5"] // Add this with default values
 });
 const [selectedUserDetail, setSelectedUserDetail] = useState<UserProfileItem | null>(null);
 const [userDetailModal, setUserDetailModal] = useState(false);
@@ -682,7 +686,6 @@ const CurrentStateWidget = () => {
 };
 // Add these functions to your component
 
-// Replace the fetchFilterOptions function with this:
 const fetchFilterOptions = async () => {
   try {
     // Fetch unique values for each filter from profile_complete users only
@@ -691,91 +694,280 @@ const fetchFilterOptions = async () => {
       .select('university')
       .not('university', 'is', null)
       .eq('role', 'attendee')
-      .eq('profile_complete', true); // Add this
+      .eq('profile_complete', true);
 
     const { data: faculties } = await supabase
       .from('users_profiles')
       .select('faculty')
       .not('faculty', 'is', null)
       .eq('role', 'attendee')
-      .eq('profile_complete', true); // Add this
+      .eq('profile_complete', true);
 
     const { data: programs } = await supabase
       .from('users_profiles')
       .select('program')
       .not('program', 'is', null)
       .eq('role', 'attendee')
-      .eq('profile_complete', true); // Add this
+      .eq('profile_complete', true);
 
     const { data: classes } = await supabase
       .from('users_profiles')
       .select('class')
       .not('class', 'is', null)
       .eq('role', 'attendee')
-      .eq('profile_complete', true); // Add this
+      .eq('profile_complete', true);
 
     const { data: howDidHear } = await supabase
       .from('users_profiles')
       .select('how_did_hear_about_event')
       .not('how_did_hear_about_event', 'is', null)
       .eq('role', 'attendee')
-      .eq('profile_complete', true); // Add this
+      .eq('profile_complete', true);
 
-    setFilterOptions({
-      universities: [...new Set(universities?.map(u => u.university).filter(Boolean))] as string[],
-      faculties: [...new Set(faculties?.map(f => f.faculty).filter(Boolean))] as string[],
-      programs: [...new Set(programs?.map(p => p.program).filter(Boolean))] as string[],
-      classes: [...new Set(classes?.map(c => c.class).filter(Boolean))] as string[],
-      howDidHearOptions: [...new Set(howDidHear?.map(h => h.how_did_hear_about_event).filter(Boolean))] as string[]
-    });
-  } catch (error) {
-    console.error('Error fetching filter options:', error);
-  }
-};
-
-// Replace the fetchFilteredUsers function with this:
-const fetchFilteredUsers = async (page: number = 1) => {
-  setLoadingUsers(true);
-  try {
-    let query = supabase
-      .from('users_profiles')
-      .select('*', { count: 'exact' })
-      .eq('role', 'attendee')
-      .eq('profile_complete', true); // Add this line
-
-    // Apply filters
-    if (filters.university) query = query.eq('university', filters.university);
-    if (filters.faculty) query = query.eq('faculty', filters.faculty);
-    if (filters.gender) query = query.eq('gender', filters.gender);
-    if (filters.degree_level) query = query.eq('degree_level', filters.degree_level);
-    if (filters.program) query = query.eq('program', filters.program);
-    if (filters.class) query = query.eq('class', filters.class);
-    if (filters.how_did_hear_about_event) query = query.eq('how_did_hear_about_event', filters.how_did_hear_about_event);
-
-    // Apply search
-    if (searchPersonalId) {
-      query = query.ilike('personal_id', `%${searchPersonalId}%`);
+      setFilterOptions(prev => ({
+        ...prev,
+        attendanceDays: ["1", "2", "3", "4", "5"], // Make sure this is always set
+        universities: [...new Set(universities?.map(u => u.university).filter(Boolean))] as string[],
+        faculties: [...new Set(faculties?.map(f => f.faculty).filter(Boolean))] as string[],
+        programs: [...new Set(programs?.map(p => p.program).filter(Boolean))] as string[],
+        classes: [...new Set(classes?.map(c => c.class).filter(Boolean))] as string[],
+        howDidHearOptions: [...new Set(howDidHear?.map(h => h.how_did_hear_about_event).filter(Boolean))] as string[]
+      }));
+    } catch (error) {
+      console.error('Error fetching filter options:', error);
     }
+  };
 
-    const from = (page - 1) * 100;
-    const to = from + 99;
-
-    const { data, error, count } = await query
-      .range(from, to)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-
-    setFilteredUsers(data || []);
-    setTotalUsersCount(count || 0);
-    setCurrentPage(page);
-  } catch (error) {
-    console.error('Error fetching filtered users:', error);
-    setFilteredUsers([]);
-  } finally {
-    setLoadingUsers(false);
-  }
-};
+  const fetchFilteredUsers = async (page: number = 1) => {
+    setLoadingUsers(true);
+    try {
+      // Apply attendance filter first - get user IDs from attendances table
+      if (filters.attended) {
+        try {
+          const getAllAttendeesForFilter = async (day?: number) => {
+            const eventStartDate = new Date('2025-10-19');
+            let targetDate = new Date(eventStartDate);
+            
+            if (day) {
+              targetDate.setDate(eventStartDate.getDate() + (day - 1));
+            } else {
+              targetDate = new Date('2025-10-19');
+            }
+            
+            const startOfDay = new Date(targetDate);
+            startOfDay.setHours(0, 0, 0, 0);
+            
+            const endOfDay = new Date(targetDate);
+            if (day) {
+              endOfDay.setHours(23, 59, 59, 999);
+            } else {
+              endOfDay.setDate(eventStartDate.getDate() + 4);
+              endOfDay.setHours(23, 59, 59, 999);
+            }
+  
+            console.log(`🔄 Fetching attendance records for ${day ? `Day ${day}` : 'all days'}...`);
+  
+            // Get ALL attendance records with scan_type='entry' for the date range
+            let allAttendanceRecords: any[] = [];
+            let page = 0;
+            const pageSize = 1000;
+            let hasMore = true;
+  
+            while (hasMore) {
+              const from = page * pageSize;
+              const to = from + pageSize - 1;
+              
+              const { data: attendanceData, error: attendanceError } = await supabase
+                .from('attendances')
+                .select('user_id')
+                .eq('scan_type', 'entry')
+                .gte('scanned_at', startOfDay.toISOString())
+                .lte('scanned_at', endOfDay.toISOString())
+                .range(from, to);
+  
+              if (attendanceError) {
+                console.error(`Error fetching attendance page ${page}:`, attendanceError);
+                throw attendanceError;
+              }
+  
+              if (attendanceData && attendanceData.length > 0) {
+                allAttendanceRecords = [...allAttendanceRecords, ...attendanceData];
+                page++;
+                
+                console.log(`📊 Fetched attendance page ${page}: ${attendanceData.length} records (Total: ${allAttendanceRecords.length})`);
+  
+                if (attendanceData.length < pageSize) {
+                  hasMore = false;
+                }
+              } else {
+                hasMore = false;
+              }
+            }
+  
+            const uniqueUserIds = [...new Set(allAttendanceRecords.map(record => record.user_id))];
+            console.log(`✅ Found ${uniqueUserIds.length} unique attendees from ${allAttendanceRecords.length} attendance records`);
+            
+            return uniqueUserIds;
+          };
+  
+          const targetDay = filters.attendance_day ? parseInt(filters.attendance_day) : undefined;
+          const attendedUserIds = await getAllAttendeesForFilter(targetDay);
+  
+          if (filters.attended === 'attended') {
+            if (attendedUserIds.length > 0) {
+              console.log(`🔍 Fetching profiles for ${attendedUserIds.length} attended users...`);
+              
+              // Instead of using IN clause with all IDs, we'll use a different approach
+              // Option 1: Use RPC function if available, or Option 2: Fetch in chunks
+              
+              // Option 2: Fetch user profiles in chunks to avoid URL length issues
+              const chunkSize = 100; // Process 100 IDs at a time
+              const userChunks = [];
+              
+              for (let i = 0; i < attendedUserIds.length; i += chunkSize) {
+                const chunk = attendedUserIds.slice(i, i + chunkSize);
+                
+                let chunkQuery = supabase
+                  .from('users_profiles')
+                  .select('*')
+                  .in('id', chunk)
+                  .eq('role', 'attendee')
+                  .eq('profile_complete', true);
+  
+                // Apply additional filters
+                if (filters.university) chunkQuery = chunkQuery.eq('university', filters.university);
+                if (filters.faculty) chunkQuery = chunkQuery.eq('faculty', filters.faculty);
+                if (filters.gender) chunkQuery = chunkQuery.eq('gender', filters.gender);
+                if (filters.degree_level) chunkQuery = chunkQuery.eq('degree_level', filters.degree_level);
+                if (filters.program) chunkQuery = chunkQuery.eq('program', filters.program);
+                if (filters.class) chunkQuery = chunkQuery.eq('class', filters.class);
+                if (filters.how_did_hear_about_event) chunkQuery = chunkQuery.eq('how_did_hear_about_event', filters.how_did_hear_about_event);
+                if (searchPersonalId) chunkQuery = chunkQuery.ilike('personal_id', `%${searchPersonalId}%`);
+  
+                const { data: chunkUsers, error: chunkError } = await chunkQuery;
+  
+                if (chunkError) {
+                  console.error('Error fetching chunk users:', chunkError);
+                  throw chunkError;
+                }
+  
+                if (chunkUsers) {
+                  userChunks.push(...chunkUsers);
+                }
+              }
+  
+              console.log(`✅ Found ${userChunks.length} attended users after filtering`);
+  
+              // Apply pagination manually
+              const from = (page - 1) * 100;
+              const to = from + 99;
+              const paginatedUsers = userChunks.slice(from, to + 1);
+  
+              setFilteredUsers(paginatedUsers);
+              setTotalUsersCount(userChunks.length);
+              setCurrentPage(page);
+              setLoadingUsers(false);
+              return;
+  
+            } else {
+              console.log('No users attended on the specified day');
+              setFilteredUsers([]);
+              setTotalUsersCount(0);
+              setLoadingUsers(false);
+              return;
+            }
+          } else if (filters.attended === 'not_attended') {
+            console.log(`🔍 Fetching users who did NOT attend...`);
+            
+            // For "not attended", we need a different approach since we can't use NOT IN with many IDs
+            // We'll get all users and filter out the attended ones in memory
+            
+            let allUsersQuery = supabase
+              .from('users_profiles')
+              .select('*', { count: 'exact' })
+              .eq('role', 'attendee')
+              .eq('profile_complete', true);
+  
+            // Apply additional filters
+            if (filters.university) allUsersQuery = allUsersQuery.eq('university', filters.university);
+            if (filters.faculty) allUsersQuery = allUsersQuery.eq('faculty', filters.faculty);
+            if (filters.gender) allUsersQuery = allUsersQuery.eq('gender', filters.gender);
+            if (filters.degree_level) allUsersQuery = allUsersQuery.eq('degree_level', filters.degree_level);
+            if (filters.program) allUsersQuery = allUsersQuery.eq('program', filters.program);
+            if (filters.class) allUsersQuery = allUsersQuery.eq('class', filters.class);
+            if (filters.how_did_hear_about_event) allUsersQuery = allUsersQuery.eq('how_did_hear_about_event', filters.how_did_hear_about_event);
+            if (searchPersonalId) allUsersQuery = allUsersQuery.ilike('personal_id', `%${searchPersonalId}%`);
+  
+            const { data: allUsers, error: allUsersError, count } = await allUsersQuery;
+  
+            if (allUsersError) {
+              console.error('Error fetching all users:', allUsersError);
+              throw allUsersError;
+            }
+  
+            // Filter out attended users in memory
+            const notAttendedUsers = allUsers?.filter(user => !attendedUserIds.includes(user.id)) || [];
+  
+            // Apply pagination
+            const from = (page - 1) * 100;
+            const to = from + 99;
+            const paginatedUsers = notAttendedUsers.slice(from, to + 1);
+  
+            console.log(`✅ Found ${notAttendedUsers.length} users who did not attend`);
+            setFilteredUsers(paginatedUsers);
+            setTotalUsersCount(notAttendedUsers.length);
+            setCurrentPage(page);
+            setLoadingUsers(false);
+            return;
+          }
+  
+        } catch (error) {
+          console.error('Error processing attendance filter:', error);
+          showFeedback("Error applying attendance filter - showing all users", "error");
+          // Continue with normal query
+        }
+      }
+  
+      // Normal query without attendance filter
+      console.log('🔍 Fetching all users without attendance filter...');
+      
+      let query = supabase
+        .from('users_profiles')
+        .select('*', { count: 'exact' })
+        .eq('role', 'attendee')
+        .eq('profile_complete', true);
+  
+      // Apply filters
+      if (filters.university) query = query.eq('university', filters.university);
+      if (filters.faculty) query = query.eq('faculty', filters.faculty);
+      if (filters.gender) query = query.eq('gender', filters.gender);
+      if (filters.degree_level) query = query.eq('degree_level', filters.degree_level);
+      if (filters.program) query = query.eq('program', filters.program);
+      if (filters.class) query = query.eq('class', filters.class);
+      if (filters.how_did_hear_about_event) query = query.eq('how_did_hear_about_event', filters.how_did_hear_about_event);
+      if (searchPersonalId) query = query.ilike('personal_id', `%${searchPersonalId}%`);
+  
+      const from = (page - 1) * 100;
+      const to = from + 99;
+  
+      const { data, error, count } = await query
+        .range(from, to)
+        .order('created_at', { ascending: false });
+  
+      if (error) throw error;
+  
+      console.log(`✅ Found ${data?.length || 0} users without attendance filter`);
+      setFilteredUsers(data || []);
+      setTotalUsersCount(count || 0);
+      setCurrentPage(page);
+    } catch (error) {
+      console.error('Error fetching filtered users:', error);
+      setFilteredUsers([]);
+      setTotalUsersCount(0);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
 
 // Replace the fetchStatisticsData function with this:
 const fetchStatisticsData = async () => {
@@ -961,7 +1153,6 @@ const handleFilterChange = (key: string, value: string) => {
   }));
 };
 
-// Clear all filters
 const clearFilters = () => {
   setFilters({
     university: "",
@@ -970,7 +1161,9 @@ const clearFilters = () => {
     degree_level: "",
     program: "",
     class: "",
-    how_did_hear_about_event: ""
+    how_did_hear_about_event: "",
+    attended: "", // Add this
+    attendance_day: "" // Add this
   });
   setSearchPersonalId("");
 };
@@ -2380,7 +2573,7 @@ const FilterView = () => {
         </div>
 
         {/* Filters Grid - Improved Layout */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           {/* University Filter */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-700">
@@ -2500,6 +2693,41 @@ const FilterView = () => {
           </div>
         </div>
 
+        {/* Attended Filter */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">
+            🎯 Attendance Status
+          </label>
+          <select
+            value={filters.attended}
+            onChange={(e) => handleFilterChange('attended', e.target.value)}
+            className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 bg-white"
+          >
+            <option value="">All Attendance Status</option>
+            <option value="attended">Attended Event</option>
+            <option value="not_attended">Not Attended</option>
+          </select>
+        </div>
+
+        {filters.attended && (
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              📅 Event Day
+            </label>
+            <select
+              value={filters.attendance_day}
+              onChange={(e) => handleFilterChange('attendance_day', e.target.value)}
+              className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 bg-white"
+            >
+              <option value="">All Days</option>
+              {filterOptions.attendanceDays?.map(day => (
+                <option key={day} value={day}>
+                  Day {day} ({getDateForDay(parseInt(day)).split(',')[0]})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         {/* Active Filters Badges */}
         {(filters.university || filters.faculty || filters.gender || filters.degree_level || 
           filters.program || filters.class || filters.how_did_hear_about_event || searchPersonalId) && (
@@ -2583,6 +2811,29 @@ const FilterView = () => {
                   </button>
                 </span>
               )}
+              {filters.attended && (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                  🎯 {filters.attended === 'attended' ? 'Attended' : 'Not Attended'}
+                  <button
+                    onClick={() => handleFilterChange('attended', '')}
+                    className="ml-1 text-indigo-600 hover:text-indigo-800"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+
+              {filters.attendance_day && (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-teal-100 text-teal-800">
+                  📅 Day {filters.attendance_day}
+                  <button
+                    onClick={() => handleFilterChange('attendance_day', '')}
+                    className="ml-1 text-teal-600 hover:text-teal-800"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
               {searchPersonalId && (
                 <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
                   🔍 {searchPersonalId}
@@ -2651,7 +2902,7 @@ const FilterView = () => {
         ) : (
           <>
             {filteredUsers.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                 {filteredUsers.map((user) => (
                   <UserCard 
                     key={user.id} 
